@@ -1,0 +1,169 @@
+{
+  "query": "loadConfiguration strategy.vip.threshold",
+  "focus_node": "DemoRunner.loadConfiguration",
+  "seed_nodes": [
+    {
+      "node_id": "DemoRunner.loadConfiguration",
+      "score": 0.5448869577479918
+    },
+    {
+      "node_id": "AbstractBaseStrategy.minScoreThreshold",
+      "score": 0.21781615111375777
+    },
+    {
+      "node_id": "EXTERNAL::Properties.load",
+      "score": 0.21275227113365114
+    },
+    {
+      "node_id": "IPromotionStrategy.getStrategyName",
+      "score": 0.09977931535532623
+    },
+    {
+      "node_id": "HighNetWorthStrategy.getStrategyName",
+      "score": 0.08891327743657995
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "DemoRunner.loadConfiguration",
+      "name": "loadConfiguration",
+      "type": "Method",
+      "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/DemoRunner.java",
+      "start_line": 52,
+      "end_line": 64,
+      "signature": "private static void loadConfiguration()",
+      "docstring": "",
+      "snippet": "    private static void loadConfiguration() {\n        try (InputStream input = DemoRunner.class.getClassLoader().getResourceAsStream(\"application.properties\")) {\n            Properties prop = new Properties();\n            if (input == null) {\n                System.out.println(\"Sorry, unable to find application.properties\");\n                return;\n            }\n            prop.load(input);\n            System.out.println(\"Loaded Config: Strategy Threshold = \" + prop.getProperty(\"strategy.vip.threshold\"));\n        } catch (IOException ex) {\n            ex.printStackTrace();\n        }\n    }\n",
+      "role": "focus",
+      "roles": [
+        "focus",
+        "seed"
+      ],
+      "highlight_span": {
+        "start_line": 52,
+        "end_line": 52
+      },
+      "why": [
+        "focus node",
+        "seed via vector search (score=0.545)"
+      ]
+    },
+    {
+      "node_id": "AbstractBaseStrategy.minScoreThreshold",
+      "name": "minScoreThreshold",
+      "type": "Field",
+      "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
+      "start_line": 8,
+      "end_line": 8,
+      "signature": "double minScoreThreshold",
+      "docstring": "",
+      "snippet": "    protected double minScoreThreshold;\n",
+      "role": "seed",
+      "roles": [
+        "seed"
+      ],
+      "highlight_span": {
+        "start_line": 8,
+        "end_line": 8
+      },
+      "why": [
+        "seed via vector search (score=0.218)"
+      ]
+    },
+    {
+      "node_id": "EXTERNAL::Properties.load",
+      "name": "Properties.load",
+      "type": "External",
+      "file_path": "",
+      "start_line": 0,
+      "end_line": 0,
+      "signature": "",
+      "docstring": "",
+      "snippet": "",
+      "role": "seed",
+      "roles": [
+        "seed"
+      ],
+      "highlight_span": null,
+      "why": [
+        "seed via vector search (score=0.213)"
+      ]
+    },
+    {
+      "node_id": "HighNetWorthStrategy.getStrategyName",
+      "name": "getStrategyName",
+      "type": "Method",
+      "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java",
+      "start_line": 12,
+      "end_line": 15,
+      "signature": "@Override public String getStrategyName()",
+      "docstring": "",
+      "snippet": "    @Override\n    public String getStrategyName() {\n        return \"VIP_WEALTH_MANAGEMENT\";\n    }\n",
+      "role": "seed",
+      "roles": [
+        "seed"
+      ],
+      "highlight_span": {
+        "start_line": 13,
+        "end_line": 13
+      },
+      "why": [
+        "seed via vector search (score=0.089)"
+      ]
+    },
+    {
+      "node_id": "IPromotionStrategy.getStrategyName",
+      "name": "getStrategyName",
+      "type": "Method",
+      "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/strategy/IPromotionStrategy.java",
+      "start_line": 6,
+      "end_line": 6,
+      "signature": "String getStrategyName();",
+      "docstring": "",
+      "snippet": "    String getStrategyName();\n",
+      "role": "seed",
+      "roles": [
+        "seed"
+      ],
+      "highlight_span": {
+        "start_line": 6,
+        "end_line": 6
+      },
+      "why": [
+        "seed via vector search (score=0.100)"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "source": "DemoRunner.loadConfiguration",
+      "target": "EXTERNAL::Properties.load",
+      "relation": "CALLS",
+      "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/DemoRunner.java",
+      "line": 59
+    }
+  ],
+  "focus": {
+    "node_id": "DemoRunner.loadConfiguration"
+  },
+  "call_graph": {
+    "callees": [],
+    "callers": []
+  },
+  "data_flow": {
+    "read_fields": [],
+    "written_fields": []
+  },
+  "same_class": [
+    "DemoRunner.loadConfiguration"
+  ],
+  "same_file": [
+    "DemoRunner.loadConfiguration"
+  ],
+  "stats": {
+    "seed_top_k": 5,
+    "hops": 0,
+    "selected_nodes": 5,
+    "selected_edges": 1
+  }
+}

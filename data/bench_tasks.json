@@ -1,0 +1,68 @@
+{
+  "tasks": [
+    {
+      "name": "refactor_legacy_scoring_util",
+      "description": "重构 LegacyScoringUtil 静态工具类，拆解成更加可扩展、解耦的模块",
+      "focus_node": "LegacyScoringUtil.calculateBaseScore",
+      "focus_node_after": "ScoringService.calculateBaseScore",
+      "query": "LegacyScoringUtil.calculateBaseScore",
+      "expected_files": [
+        "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+        "src/main/java/com/icbc/marketing/core/ScoringService.java"
+      ],
+      "request": "需求：将 LegacyScoringUtil 的关键能力（算分/黑名单判断）从 static 工具类中解耦出来，形成可替换的服务/接口实现（允许内部先用适配器保留旧逻辑）。\n验收：DemoRunner 默认输入下输出保持不变；工程可编译运行。\n约束：引擎/策略层不应再与 LegacyScoringUtil 的 static 方法形成强耦合依赖。"
+    },
+    {
+      "name": "introduce_region_context",
+      "description": "修改 calculateBaseScore() 方法，支持 Region 上下文的传入，而不是硬编码参数",
+      "focus_node": "LegacyScoringUtil.calculateBaseScore",
+      "focus_node_after": "ScoringService.calculateBaseScoreWithRegion",
+      "query": "LegacyScoringUtil.calculateBaseScore",
+      "expected_files": [
+        "src/main/java/com/icbc/marketing/core/ScoringService.java"
+      ],
+      "request": "需求：为 base score 引入 Region 上下文，作为一等公民参与计算（支持默认 Region），而不是依赖 Map 随意塞 key。\n验收：不修改 DemoRunner 默认输入时输出保持不变；新增 Region 后可通过传入不同 Region 触发不同口径（可先预留接口/分支）。\n约束：保持向后兼容（原有调用仍可工作/可标记 deprecated），避免大范围破坏式改动。"
+    },
+    {
+      "name": "split_campaign_decision_engine_responsibilities",
+      "description": "重构 CampaignDecisionEngine，拆分出风控逻辑、推荐逻辑和策略装配，确保符合单一职责原则",
+      "focus_node": "CampaignDecisionEngine.decideOffer",
+      "focus_node_after": "CampaignDecisionEngine.decideOffer",
+      "query": "CampaignDecisionEngine.decideOffer",
+      "expected_files": [
+        "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+        "src/main/java/com/icbc/marketing/service/RiskControlEngine.java",
+        "src/main/java/com/icbc/marketing/service/RecommendationEngine.java",
+        "src/main/java/com/icbc/marketing/service/StrategyFactory.java"
+      ],
+      "request": "需求：重构 CampaignDecisionEngine，使其不再同时承担风控、推荐执行和策略装配；拆出职责清晰的组件/工厂并支持注入。\n验收：DemoRunner 行为保持不变；新增/替换策略无需修改引擎核心逻辑（可通过构造注入/工厂）。\n约束：不引入外部依赖；保持接口清晰，便于单测替换实现。"
+    },
+     
+    {
+      "name": "remove_magic_numbers",
+      "description": "去除硬编码的 magic number 和阈值，改为配置驱动的方式",
+      "focus_node": "LegacyScoringUtil.calculateBaseScore",
+      "focus_node_after": "LegacyScoringUtil.calculateBaseScore",
+      "query": "GOLDEN_RATIO",
+      "expected_files": [
+        "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+        "src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java",
+        "src/main/java/com/icbc/marketing/core/ConfigurableThresholds.java"
+      ],
+      "request": "需求：移除算分与策略中的 magic number / hard-code 规则，将阈值与权重配置化（并让配置真正生效）。\n验收：默认配置下输出不变；修改配置（如 strategy.vip.threshold 或算分权重）能影响决策结果。\n约束：配置读取需健壮（找不到配置时回退默认值），不引入新依赖。"
+    },
+    {
+      "name": "consolidate_base_score_computation",
+      "description": "合并重复的 baseScore 计算逻辑，避免在多个地方重复计算，提升性能与一致性",
+      "focus_node": "AbstractBaseStrategy.passBasicRiskCheck",
+      "focus_node_after": "ScoringService.computeBaseScoreForRiskCheck",
+      "query": "LegacyScoringUtil.calculateBaseScore",
+      "expected_files": [
+        "src/main/java/com/icbc/marketing/core/ScoringService.java",
+        "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+        "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java"
+      ],
+      "request": "需求：消除 baseScore 在引擎层与策略层的重复计算，保证一次决策只计算一次并复用同一口径。\n验收：输出不变；代码中不再出现同一决策链路的重复算分调用（可通过缓存到上下文/决策对象）。\n约束：复用方式应对未来扩展（如 Region 上下文）友好，避免再次散落计算逻辑。"
+    }
+  ]
+}

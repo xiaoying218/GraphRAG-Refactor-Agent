@@ -1,0 +1,13 @@
+{
+  "expected_files": [
+    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java"
+  ],
+  "found_files": [
+    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java"
+  ],
+  "hit_files": [
+    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java"
+  ],
+  "missing_files": [],
+  "coverage": 1.0
+}

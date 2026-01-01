@@ -1,0 +1,48 @@
+{
+  "tasks": [
+    {
+      "name": "region_context_wirethrough",
+      "description": "Add Region context as a first-class input to base scoring, wired through the decision flow without changing default behavior.",
+      "focus_node": "LegacyScoringUtil.calculateBaseScore",
+      "focus_node_after": "LegacyScoringUtil.calculateBaseScore",
+      "query": "Region context base score",
+      "expected_files": [
+        "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+        "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+        "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
+        "src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java",
+        "src/main/java/com/icbc/marketing/DemoRunner.java"
+      ],
+      "request": "需求：base score 需要支持 Region 上下文（例如 TW/SG/CN）。\n验收：不修改 DemoRunner 的输入时，现有三种 Case 的输出保持不变（默认 Region 可为 TW）；代码可编译运行。\n约束：不要把 Region 继续当作 Map 里的随意 key；内部核心逻辑应能以清晰、可演进的方式拿到 Region。"
+    },
+    {
+      "name": "config_threshold_effective",
+      "description": "Make strategy.vip.threshold actually affect VIP strategy behavior; config changes should change the outcome.",
+      "focus_node": "DemoRunner.loadConfiguration",
+      "focus_node_after": "DemoRunner.loadConfiguration",
+      "query": "loadConfiguration strategy.vip.threshold",
+      "expected_files": [
+        "src/main/java/com/icbc/marketing/DemoRunner.java",
+        "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+        "src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java",
+        "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java"
+      ],
+      "request": "需求：application.properties 里的 strategy.vip.threshold 必须真正影响 HighNetWorthStrategy 的判定。\n验收：修改该配置后，VIP Case（U_8888）的决策结果会随阈值变化而变化；默认配置下输出保持不变；代码可编译运行。"
+    },
+    {
+      "name": "invert_legacy_dependency_and_dedup_score",
+      "description": "Apply dependency inversion so engine/strategy no longer call LegacyScoringUtil statics directly; also avoid duplicated baseScore computation per decision.",
+      "focus_node": "AbstractBaseStrategy.passBasicRiskCheck",
+      "focus_node_after": "AbstractBaseStrategy.passBasicRiskCheck",
+      "query": "passBasicRiskCheck",
+      "expected_files": [
+        "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
+        "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+        "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+        "src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java",
+        "src/main/java/com/icbc/marketing/strategy/IPromotionStrategy.java"
+      ],
+      "request": "需求：把 LegacyScoringUtil 作为遗留实现隔离起来（依赖倒置）。\n验收：CampaignDecisionEngine 和策略体系（AbstractBaseStrategy/HighNetWorthStrategy 等）不再直接调用 LegacyScoringUtil 的 static 方法；同时一次决策过程中 baseScore 只计算一次并复用；DemoRunner 输出保持不变；代码可编译运行。"
+    }
+  ]
+}

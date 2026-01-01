@@ -1,0 +1,21 @@
+{
+  "expected_files": [
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+    "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java"
+  ],
+  "found_files": [
+    "src/main/java/com/icbc/marketing/DemoRunner.java",
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+    "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
+    "src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java"
+  ],
+  "hit_files": [
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+    "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java"
+  ],
+  "missing_files": [],
+  "coverage": 1.0
+}

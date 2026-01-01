@@ -1,0 +1,144 @@
+{
+  "status": "failed",
+  "attempts": 3,
+  "objective": "需求：将核心决策/风控链路中的 Map<String,Object> 逐步替换为类型安全的上下文对象（如 FeatureContext/RiskContext），统一解析与默认值处理。\n验收：运行行为不变且不再在核心逻辑中散落强制类型转换；缺失字段/不同数值类型不会导致 ClassCastException。\n约束：Map 仅保留在边界（入口/适配层），核心逻辑以强类型对象为准。",
+  "modified_files": [],
+  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20251231_161401",
+  "allowed_commands": [
+    "ls",
+    "cat",
+    "sed",
+    "python",
+    "python3",
+    "mvn",
+    "./mvnw",
+    "gradle",
+    "./gradlew",
+    "npm",
+    "pnpm",
+    "yarn",
+    "pytest",
+    "black",
+    "ruff",
+    "prettier",
+    "eslint",
+    "google-java-format",
+    "git",
+    "javac",
+    "java"
+  ],
+  "context_coverage": {
+    "expected_files": [
+      "src/main/java/com/icbc/marketing/core/FeatureContext.java",
+      "src/main/java/com/icbc/marketing/core/RiskContext.java",
+      "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java"
+    ],
+    "found_files": [
+      "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+      "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
+      "src/main/java/com/icbc/marketing/strategy/IPromotionStrategy.java"
+    ],
+    "hit_files": [
+      "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java"
+    ],
+    "missing_files": [
+      "src/main/java/com/icbc/marketing/core/FeatureContext.java",
+      "src/main/java/com/icbc/marketing/core/RiskContext.java"
+    ],
+    "coverage": 0.3333333333333333
+  },
+  "focus_before": "CampaignDecisionEngine.decideOffer",
+  "focus_after": "CampaignDecisionEngine.decideOffer",
+  "pre_focus_method": {
+    "method_id": "CampaignDecisionEngine.decideOffer",
+    "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+    "start_line": 27,
+    "end_line": 61,
+    "loc": 35,
+    "loc_non_empty": 16,
+    "cyclomatic": 5
+  },
+  "post_focus_method": {
+    "method_id": "CampaignDecisionEngine.decideOffer",
+    "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20251231_161401/src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+    "start_line": 28,
+    "end_line": 62,
+    "loc": 35,
+    "loc_non_empty": 17,
+    "cyclomatic": 5
+  },
+  "pre_project_maintainability": {
+    "methods": 13,
+    "avg_loc": 9.0,
+    "avg_cyclomatic": 1.5384615384615385,
+    "p95_loc": 34.4,
+    "p95_cyclomatic": 3.799999999999997,
+    "max_loc": 35,
+    "max_cyclomatic": 5,
+    "duplication": {
+      "total_lines": 157,
+      "duplicate_lines": 50,
+      "duplicate_line_ratio": 0.3184713375796178,
+      "distinct_lines": 114
+    }
+  },
+  "post_project_maintainability": {
+    "methods": 23,
+    "avg_loc": 7.869565217391305,
+    "avg_cyclomatic": 1.8695652173913044,
+    "p95_loc": 31.89999999999997,
+    "p95_cyclomatic": 5.0,
+    "max_loc": 35,
+    "max_cyclomatic": 5,
+    "duplication": {
+      "total_lines": 239,
+      "duplicate_lines": 91,
+      "duplicate_line_ratio": 0.3807531380753138,
+      "distinct_lines": 163
+    }
+  },
+  "pre_change_risk": {
+    "focus_node": "CampaignDecisionEngine.decideOffer",
+    "fan_in": 1,
+    "fan_out": 5,
+    "upstream_depth_max": 1,
+    "downstream_depth_max": 2,
+    "impacted_nodes_upstream": 1,
+    "impacted_nodes_downstream": 7,
+    "impacted_files": [
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/DemoRunner.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java"
+    ]
+  },
+  "post_change_risk": {
+    "focus_node": "CampaignDecisionEngine.decideOffer",
+    "fan_in": 1,
+    "fan_out": 6,
+    "upstream_depth_max": 1,
+    "downstream_depth_max": 3,
+    "impacted_nodes_upstream": 1,
+    "impacted_nodes_downstream": 19,
+    "impacted_files": [
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20251231_161401/src/main/java/com/icbc/marketing/DemoRunner.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20251231_161401/src/main/java/com/icbc/marketing/core/FeatureContext.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20251231_161401/src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20251231_161401/src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java"
+    ]
+  },
+  "pre_impacted_files": [
+    "src/main/java/com/icbc/marketing/DemoRunner.java",
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java"
+  ],
+  "post_impacted_files": [
+    "src/main/java/com/icbc/marketing/DemoRunner.java",
+    "src/main/java/com/icbc/marketing/core/FeatureContext.java",
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java"
+  ],
+  "accept_ok": false,
+  "accept_reasons": [
+    "missing_expected_files: src/main/java/com/icbc/marketing/core/RiskContext.java"
+  ]
+}

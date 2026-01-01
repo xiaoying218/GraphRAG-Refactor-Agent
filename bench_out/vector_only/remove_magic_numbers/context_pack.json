@@ -1,0 +1,60 @@
+{
+  "query": "GOLDEN_RATIO",
+  "focus_node": "LegacyScoringUtil.GOLDEN_RATIO",
+  "seed_nodes": [
+    {
+      "node_id": "LegacyScoringUtil.GOLDEN_RATIO",
+      "score": 0.5447766753333326
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "LegacyScoringUtil.GOLDEN_RATIO",
+      "name": "GOLDEN_RATIO",
+      "type": "Field",
+      "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+      "start_line": 13,
+      "end_line": 13,
+      "signature": "double GOLDEN_RATIO = 0.618",
+      "docstring": "// Magic number alert: 0.618",
+      "snippet": "    private static final double GOLDEN_RATIO = 0.618;\n",
+      "role": "focus",
+      "roles": [
+        "focus",
+        "seed"
+      ],
+      "highlight_span": {
+        "start_line": 13,
+        "end_line": 13
+      },
+      "why": [
+        "focus node",
+        "seed via vector search (score=0.545)"
+      ]
+    }
+  ],
+  "edges": [],
+  "focus": {
+    "node_id": "LegacyScoringUtil.GOLDEN_RATIO"
+  },
+  "call_graph": {
+    "callees": [],
+    "callers": []
+  },
+  "data_flow": {
+    "read_fields": [],
+    "written_fields": []
+  },
+  "same_class": [
+    "LegacyScoringUtil.GOLDEN_RATIO"
+  ],
+  "same_file": [
+    "LegacyScoringUtil.GOLDEN_RATIO"
+  ],
+  "stats": {
+    "seed_top_k": 5,
+    "hops": 0,
+    "selected_nodes": 1,
+    "selected_edges": 0
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "status": "success",
+  "attempts": 2,
+  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_160056",
+  "artifacts_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_160056/.agent_artifacts",
+  "modified_files": [
+    "src/main/java/com/icbc/marketing/core/DecisionContext.java",
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "target/classes/com/icbc/marketing/DemoRunner.class",
+    "target/classes/com/icbc/marketing/core/DecisionContext.class",
+    "target/classes/com/icbc/marketing/core/LegacyScoringUtil.class",
+    "target/classes/com/icbc/marketing/service/CampaignDecisionEngine.class",
+    "target/classes/com/icbc/marketing/strategy/AbstractBaseStrategy.class",
+    "target/classes/com/icbc/marketing/strategy/IPromotionStrategy.class",
+    "target/classes/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.class"
+  ],
+  "objective": "需求：消除 baseScore 在引擎层与策略层的重复计算，保证一次决策只计算一次并复用同一口径。\n验收：输出不变；代码中不再出现同一决策链路的重复算分调用（可通过缓存到上下文/决策对象）。\n约束：复用方式应对未来扩展（如 Region 上下文）友好，避免再次散落计算逻辑。"
+}

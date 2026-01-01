@@ -1,0 +1,24 @@
+{
+  "status": "success",
+  "attempts": 5,
+  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_155438",
+  "artifacts_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_155438/.agent_artifacts",
+  "modified_files": [
+    "src/main/java/com/icbc/marketing/core/LegacyScoringAdapter.java",
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "src/main/java/com/icbc/marketing/core/ScoringService.java",
+    "src/main/java/com/icbc/marketing/core/ScoringServiceFactory.java",
+    "src/main/java/com/icbc/marketing/engine/DemoRunner.java",
+    "target/classes/com/icbc/marketing/DemoRunner.class",
+    "target/classes/com/icbc/marketing/core/LegacyScoringAdapter.class",
+    "target/classes/com/icbc/marketing/core/LegacyScoringUtil.class",
+    "target/classes/com/icbc/marketing/core/ScoringService.class",
+    "target/classes/com/icbc/marketing/core/ScoringServiceFactory.class",
+    "target/classes/com/icbc/marketing/engine/DemoRunner.class",
+    "target/classes/com/icbc/marketing/service/CampaignDecisionEngine.class",
+    "target/classes/com/icbc/marketing/strategy/AbstractBaseStrategy.class",
+    "target/classes/com/icbc/marketing/strategy/IPromotionStrategy.class",
+    "target/classes/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.class"
+  ],
+  "objective": "需求：将 LegacyScoringUtil 的关键能力（算分/黑名单判断）从 static 工具类中解耦出来，形成可替换的服务/接口实现（允许内部先用适配器保留旧逻辑）。\n验收：DemoRunner 默认输入下输出保持不变；工程可编译运行。\n约束：引擎/策略层不应再与 LegacyScoringUtil 的 static 方法形成强耦合依赖。"
+}

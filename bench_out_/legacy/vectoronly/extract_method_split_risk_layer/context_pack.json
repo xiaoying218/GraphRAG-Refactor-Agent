@@ -1,0 +1,60 @@
+{
+  "query": "CampaignDecisionEngine.decideOffer",
+  "focus_node": "CampaignDecisionEngine.decideOffer",
+  "seed_nodes": [
+    {
+      "node_id": "CampaignDecisionEngine.decideOffer",
+      "score": 1.0
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "CampaignDecisionEngine.decideOffer",
+      "name": "decideOffer",
+      "type": "Method",
+      "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+      "start_line": 27,
+      "end_line": 61,
+      "signature": "public String decideOffer(String userId, Map<String, Object> realTimeFeatures)",
+      "docstring": "",
+      "snippet": "    public String decideOffer(String userId, Map<String, Object> realTimeFeatures) {\n        System.out.println(\"Processing decision for user: \" + userId);\n\n        // =========================================================\n        // Step 1: Risk Control Layer (Pre-computation) 【风控层】\n        // =========================================================\n        \n        // 检查 1: 黑名单风控\n        // The dependency graph should catch this reference to LegacyScoringUtil\n        if (LegacyScoringUtil.isBlacklisted(userId)) {\n            return \"BLOCK: User is Blacklisted (Risk Control)\";\n        }\n\n        // 检查 2: 基础指标门槛风控\n        // The prompt will ask to refactor this method signature!\n        // [Graph RAG Key Point]: If 'calculateBaseScore' changes, this line breaks.\n        double baseScore = LegacyScoringUtil.calculateBaseScore(realTimeFeatures);\n        \n        if (baseScore < 0) {\n            return \"BLOCK: Activity Score too low (Metric Filter)\";\n        }\n\n        // =========================================================\n        // Step 2: Marketing Strategy Layer (Recommendation) 【推荐层】\n        // =========================================================\n        \n        for (IPromotionStrategy strategy : strategies) {\n            // Strategies ALSO depend on the metrics calculated above\n            if (strategy.isApplicable(realTimeFeatures)) {\n                return strategy.execute(userId, realTimeFeatures);\n            }\n        }\n\n        return \"DEFAULT: General Savings Promo\";\n    }\n",
+      "role": "focus",
+      "roles": [
+        "focus",
+        "seed"
+      ],
+      "highlight_span": {
+        "start_line": 27,
+        "end_line": 27
+      },
+      "why": [
+        "focus node",
+        "seed via vector search (score=1.000)"
+      ]
+    }
+  ],
+  "edges": [],
+  "focus": {
+    "node_id": "CampaignDecisionEngine.decideOffer"
+  },
+  "call_graph": {
+    "callees": [],
+    "callers": []
+  },
+  "data_flow": {
+    "read_fields": [],
+    "written_fields": []
+  },
+  "same_class": [
+    "CampaignDecisionEngine.decideOffer"
+  ],
+  "same_file": [
+    "CampaignDecisionEngine.decideOffer"
+  ],
+  "stats": {
+    "seed_top_k": 5,
+    "hops": 0,
+    "selected_nodes": 1,
+    "selected_edges": 0
+  }
+}

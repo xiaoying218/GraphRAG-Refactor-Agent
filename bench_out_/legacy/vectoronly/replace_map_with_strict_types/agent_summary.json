@@ -1,0 +1,8 @@
+{
+  "status": "failed",
+  "attempts": 3,
+  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20251231_161401",
+  "artifacts_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20251231_161401/.agent_artifacts",
+  "modified_files": [],
+  "objective": "需求：将核心决策/风控链路中的 Map<String,Object> 逐步替换为类型安全的上下文对象（如 FeatureContext/RiskContext），统一解析与默认值处理。\n验收：运行行为不变且不再在核心逻辑中散落强制类型转换；缺失字段/不同数值类型不会导致 ClassCastException。\n约束：Map 仅保留在边界（入口/适配层），核心逻辑以强类型对象为准。"
+}

@@ -1,0 +1,103 @@
+{
+  "status": "success",
+  "attempts": 1,
+  "objective": "Refactor LegacyScoringUtil.calculateBaseScore to improve maintainability by extracting hard-coded constants and making the calculation logic more explicit, while preserving existing behavior.",
+  "modified_files": [
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java"
+  ],
+  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20251226_131426",
+  "context_coverage": {
+    "expected_files": [
+      "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+      "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+      "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java"
+    ],
+    "found_files": [
+      "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java"
+    ],
+    "hit_files": [
+      "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java"
+    ],
+    "missing_files": [
+      "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+      "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java"
+    ],
+    "coverage": 0.3333333333333333
+  },
+  "focus_before": "LegacyScoringUtil.calculateBaseScore",
+  "focus_after": "LegacyScoringUtil.computeBaseScore",
+  "pre_focus_method": {
+    "method_id": "LegacyScoringUtil.calculateBaseScore",
+    "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "start_line": 19,
+    "end_line": 25,
+    "loc": 7,
+    "loc_non_empty": 5,
+    "cyclomatic": 1
+  },
+  "post_focus_method": null,
+  "pre_project_maintainability": {
+    "methods": 13,
+    "avg_loc": 9.0,
+    "avg_cyclomatic": 1.5384615384615385,
+    "p95_loc": 34.4,
+    "p95_cyclomatic": 3.799999999999997,
+    "max_loc": 35,
+    "max_cyclomatic": 5,
+    "duplication": {
+      "total_lines": 157,
+      "duplicate_lines": 50,
+      "duplicate_line_ratio": 0.3184713375796178,
+      "distinct_lines": 114
+    }
+  },
+  "post_project_maintainability": {
+    "methods": 13,
+    "avg_loc": 9.076923076923077,
+    "avg_cyclomatic": 1.5384615384615385,
+    "p95_loc": 34.4,
+    "p95_cyclomatic": 3.799999999999997,
+    "max_loc": 35,
+    "max_cyclomatic": 5,
+    "duplication": {
+      "total_lines": 159,
+      "duplicate_lines": 50,
+      "duplicate_line_ratio": 0.31446540880503143,
+      "distinct_lines": 116
+    }
+  },
+  "pre_change_risk": {
+    "focus_node": "LegacyScoringUtil.calculateBaseScore",
+    "fan_in": 2,
+    "fan_out": 1,
+    "upstream_depth_max": 2,
+    "downstream_depth_max": 1,
+    "impacted_nodes_upstream": 4,
+    "impacted_nodes_downstream": 1,
+    "impacted_files": [
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/DemoRunner.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java"
+    ]
+  },
+  "post_change_risk": {
+    "focus_node": "LegacyScoringUtil.computeBaseScore",
+    "fan_in": 0,
+    "fan_out": 0,
+    "upstream_depth_max": 0,
+    "downstream_depth_max": 0,
+    "impacted_nodes_upstream": 0,
+    "impacted_nodes_downstream": 0,
+    "impacted_files": []
+  },
+  "pre_impacted_files": [
+    "src/main/java/com/icbc/marketing/DemoRunner.java",
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+    "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
+    "src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java"
+  ],
+  "post_impacted_files": []
+}

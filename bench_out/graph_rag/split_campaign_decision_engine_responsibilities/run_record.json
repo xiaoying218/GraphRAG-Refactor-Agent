@@ -1,0 +1,133 @@
+{
+  "status": "failed_acceptance",
+  "attempts": 2,
+  "objective": "需求：重构 CampaignDecisionEngine，使其不再同时承担风控、推荐执行和策略装配；拆出职责清晰的组件/工厂并支持注入。\n验收：DemoRunner 行为保持不变；新增/替换策略无需修改引擎核心逻辑（可通过构造注入/工厂）。\n约束：不引入外部依赖；保持接口清晰，便于单测替换实现。",
+  "modified_files": [
+    "src/main/java/com/icbc/marketing/DemoRunner.java",
+    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+    "target/classes/com/icbc/marketing/DemoRunner.class",
+    "target/classes/com/icbc/marketing/core/LegacyScoringUtil.class",
+    "target/classes/com/icbc/marketing/service/CampaignDecisionEngine$DefaultRiskControlService.class",
+    "target/classes/com/icbc/marketing/service/CampaignDecisionEngine$DefaultStrategyFactory.class",
+    "target/classes/com/icbc/marketing/service/CampaignDecisionEngine$RiskControlService.class",
+    "target/classes/com/icbc/marketing/service/CampaignDecisionEngine$StrategyFactory.class",
+    "target/classes/com/icbc/marketing/service/CampaignDecisionEngine.class",
+    "target/classes/com/icbc/marketing/strategy/AbstractBaseStrategy.class",
+    "target/classes/com/icbc/marketing/strategy/IPromotionStrategy.class",
+    "target/classes/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.class"
+  ],
+  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_154636",
+  "allowed_commands": null,
+  "context_coverage": {
+    "expected_files": [
+      "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+      "src/main/java/com/icbc/marketing/service/RecommendationEngine.java",
+      "src/main/java/com/icbc/marketing/service/RiskControlEngine.java",
+      "src/main/java/com/icbc/marketing/service/StrategyFactory.java"
+    ],
+    "found_files": [
+      "src/main/java/com/icbc/marketing/DemoRunner.java",
+      "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+      "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java"
+    ],
+    "hit_files": [
+      "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java"
+    ],
+    "missing_files": [
+      "src/main/java/com/icbc/marketing/service/RecommendationEngine.java",
+      "src/main/java/com/icbc/marketing/service/RiskControlEngine.java",
+      "src/main/java/com/icbc/marketing/service/StrategyFactory.java"
+    ],
+    "coverage": 0.25
+  },
+  "focus_before": "CampaignDecisionEngine.decideOffer",
+  "focus_after": "CampaignDecisionEngine.decideOffer",
+  "pre_focus_method": {
+    "method_id": "CampaignDecisionEngine.decideOffer",
+    "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+    "start_line": 27,
+    "end_line": 61,
+    "loc": 35,
+    "loc_non_empty": 16,
+    "cyclomatic": 5
+  },
+  "post_focus_method": {
+    "method_id": "CampaignDecisionEngine.decideOffer",
+    "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_154636/src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+    "start_line": 41,
+    "end_line": 64,
+    "loc": 24,
+    "loc_non_empty": 14,
+    "cyclomatic": 4
+  },
+  "pre_project_maintainability": {
+    "methods": 13,
+    "avg_loc": 9.0,
+    "avg_cyclomatic": 1.5384615384615385,
+    "p95_loc": 34.4,
+    "p95_cyclomatic": 3.799999999999997,
+    "max_loc": 35,
+    "max_cyclomatic": 5,
+    "duplication": {
+      "total_lines": 157,
+      "duplicate_lines": 50,
+      "duplicate_line_ratio": 0.3184713375796178,
+      "distinct_lines": 114
+    }
+  },
+  "post_project_maintainability": {
+    "methods": 19,
+    "avg_loc": 6.894736842105263,
+    "avg_cyclomatic": 1.4210526315789473,
+    "p95_loc": 24.99999999999998,
+    "p95_cyclomatic": 3.099999999999998,
+    "max_loc": 34,
+    "max_cyclomatic": 4,
+    "duplication": {
+      "total_lines": 217,
+      "duplicate_lines": 76,
+      "duplicate_line_ratio": 0.35023041474654376,
+      "distinct_lines": 148
+    }
+  },
+  "pre_change_risk": {
+    "focus_node": "CampaignDecisionEngine.decideOffer",
+    "fan_in": 1,
+    "fan_out": 5,
+    "upstream_depth_max": 1,
+    "downstream_depth_max": 2,
+    "impacted_nodes_upstream": 1,
+    "impacted_nodes_downstream": 7,
+    "impacted_files": [
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/DemoRunner.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java"
+    ]
+  },
+  "post_change_risk": {
+    "focus_node": "CampaignDecisionEngine.decideOffer",
+    "fan_in": 1,
+    "fan_out": 5,
+    "upstream_depth_max": 1,
+    "downstream_depth_max": 1,
+    "impacted_nodes_upstream": 1,
+    "impacted_nodes_downstream": 5,
+    "impacted_files": [
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_154636/src/main/java/com/icbc/marketing/DemoRunner.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_154636/src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java"
+    ]
+  },
+  "pre_impacted_files": [
+    "src/main/java/com/icbc/marketing/DemoRunner.java",
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java"
+  ],
+  "post_impacted_files": [
+    "src/main/java/com/icbc/marketing/DemoRunner.java",
+    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java"
+  ],
+  "accept_ok": false,
+  "accept_reasons": [
+    "missing_expected_files: src/main/java/com/icbc/marketing/service/RiskControlEngine.java, src/main/java/com/icbc/marketing/service/RecommendationEngine.java, src/main/java/com/icbc/marketing/service/StrategyFactory.java"
+  ]
+}

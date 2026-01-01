@@ -1,0 +1,193 @@
+{
+  "query": "Region context base score",
+  "focus_node": "LegacyScoringUtil.calculateBaseScore",
+  "seed_nodes": [
+    {
+      "node_id": "LegacyScoringUtil.calculateBaseScore",
+      "score": 0.43884803175150555
+    },
+    {
+      "node_id": "AbstractBaseStrategy.minScoreThreshold",
+      "score": 0.20837952577000537
+    },
+    {
+      "node_id": "AbstractBaseStrategy",
+      "score": 0.11721313814789851
+    },
+    {
+      "node_id": "AbstractBaseStrategy.execute",
+      "score": 0.10725103431618092
+    },
+    {
+      "node_id": "AbstractBaseStrategy.passBasicRiskCheck",
+      "score": 0.06804805317807461
+    }
+  ],
+  "nodes": [
+    {
+      "node_id": "LegacyScoringUtil.calculateBaseScore",
+      "name": "calculateBaseScore",
+      "type": "Method",
+      "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+      "start_line": 19,
+      "end_line": 25,
+      "signature": "public static double calculateBaseScore(Map<String, Object> flinkFeatures)",
+      "docstring": "/**\n     * Calculates a base user score.\n     * @deprecated Logic is outdated, should be refactored to handle \"Region\" context.\n     */",
+      "snippet": "    public static double calculateBaseScore(Map<String, Object> flinkFeatures) {\n        double txnVolume = (double) flinkFeatures.getOrDefault(\"last_1h_txn_amt\", 0.0);\n        int loginCount = (int) flinkFeatures.getOrDefault(\"login_count_7d\", 0);\n\n        // Simple linear hard-coded logic\n        return (txnVolume * 0.001) + (loginCount * 10) * GOLDEN_RATIO;\n    }\n",
+      "role": "focus",
+      "roles": [
+        "focus",
+        "seed"
+      ],
+      "highlight_span": {
+        "start_line": 19,
+        "end_line": 19
+      },
+      "why": [
+        "focus node",
+        "seed via vector search (score=0.439)"
+      ]
+    },
+    {
+      "node_id": "AbstractBaseStrategy",
+      "name": "AbstractBaseStrategy",
+      "type": "Class",
+      "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
+      "start_line": 6,
+      "end_line": 23,
+      "signature": "public abstract class AbstractBaseStrategy implements IPromotionStrategy",
+      "docstring": "",
+      "snippet": "public abstract class AbstractBaseStrategy implements IPromotionStrategy {\n\n    protected double minScoreThreshold;\n\n    public AbstractBaseStrategy(double minScoreThreshold) {\n        this.minScoreThreshold = minScoreThreshold;\n    }\n\n    // Common logic shared by all subclasses\n    protected boolean passBasicRiskCheck(Map<String, Object> features) {\n        // DEPENDENCY ALERT: Calls the legacy static utility\n        double currentScore = LegacyScoringUtil.calculateBaseScore(features);\n        return currentScore > minScoreThreshold;\n    }\n\n    @Override\n    public abstract String execute(String userId, Map<String, Object> context);\n}",
+      "role": "seed",
+      "roles": [
+        "seed"
+      ],
+      "highlight_span": {
+        "start_line": 6,
+        "end_line": 6
+      },
+      "why": [
+        "seed via vector search (score=0.117)"
+      ]
+    },
+    {
+      "node_id": "AbstractBaseStrategy.execute",
+      "name": "execute",
+      "type": "Method",
+      "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
+      "start_line": 21,
+      "end_line": 22,
+      "signature": "@Override public abstract String execute(String userId, Map<String, Object> context);",
+      "docstring": "",
+      "snippet": "    @Override\n    public abstract String execute(String userId, Map<String, Object> context);\n",
+      "role": "seed",
+      "roles": [
+        "seed"
+      ],
+      "highlight_span": {
+        "start_line": 22,
+        "end_line": 22
+      },
+      "why": [
+        "seed via vector search (score=0.107)"
+      ]
+    },
+    {
+      "node_id": "AbstractBaseStrategy.minScoreThreshold",
+      "name": "minScoreThreshold",
+      "type": "Field",
+      "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
+      "start_line": 8,
+      "end_line": 8,
+      "signature": "double minScoreThreshold",
+      "docstring": "",
+      "snippet": "    protected double minScoreThreshold;\n",
+      "role": "seed",
+      "roles": [
+        "seed"
+      ],
+      "highlight_span": {
+        "start_line": 8,
+        "end_line": 8
+      },
+      "why": [
+        "seed via vector search (score=0.208)"
+      ]
+    },
+    {
+      "node_id": "AbstractBaseStrategy.passBasicRiskCheck",
+      "name": "passBasicRiskCheck",
+      "type": "Method",
+      "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
+      "start_line": 15,
+      "end_line": 19,
+      "signature": "protected boolean passBasicRiskCheck(Map<String, Object> features)",
+      "docstring": "// Common logic shared by all subclasses",
+      "snippet": "    protected boolean passBasicRiskCheck(Map<String, Object> features) {\n        // DEPENDENCY ALERT: Calls the legacy static utility\n        double currentScore = LegacyScoringUtil.calculateBaseScore(features);\n        return currentScore > minScoreThreshold;\n    }\n",
+      "role": "seed",
+      "roles": [
+        "seed"
+      ],
+      "highlight_span": {
+        "start_line": 15,
+        "end_line": 15
+      },
+      "why": [
+        "seed via vector search (score=0.068)"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "source": "AbstractBaseStrategy",
+      "target": "AbstractBaseStrategy.minScoreThreshold",
+      "relation": "CONTAINS",
+      "file_path": null,
+      "line": null
+    },
+    {
+      "source": "AbstractBaseStrategy",
+      "target": "AbstractBaseStrategy.execute",
+      "relation": "CONTAINS",
+      "file_path": null,
+      "line": null
+    },
+    {
+      "source": "AbstractBaseStrategy",
+      "target": "AbstractBaseStrategy.passBasicRiskCheck",
+      "relation": "CONTAINS",
+      "file_path": null,
+      "line": null
+    },
+    {
+      "source": "AbstractBaseStrategy.passBasicRiskCheck",
+      "target": "LegacyScoringUtil.calculateBaseScore",
+      "relation": "CALLS",
+      "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
+      "line": 17
+    }
+  ],
+  "focus": {
+    "node_id": "LegacyScoringUtil.calculateBaseScore"
+  },
+  "call_graph": {
+    "callees": [],
+    "callers": []
+  },
+  "data_flow": {
+    "read_fields": [],
+    "written_fields": []
+  },
+  "same_class": [
+    "LegacyScoringUtil.calculateBaseScore"
+  ],
+  "same_file": [
+    "LegacyScoringUtil.calculateBaseScore"
+  ],
+  "stats": {
+    "seed_top_k": 5,
+    "hops": 0,
+    "selected_nodes": 5,
+    "selected_edges": 4
+  }
+}
