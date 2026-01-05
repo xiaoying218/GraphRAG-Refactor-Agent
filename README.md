@@ -159,7 +159,7 @@ Outputs:
 
 ### 2) Test-in-the-loop acceptance (planned, opt-in)
 - Add an optional acceptance mode that runs a provided JUnit suite (characterization tests / behavior snapshots) as the success criterion.
-- Feed failing test outputs/stack traces into the repair loop (during `--max-iters`) to reduce silent behavioral change. :contentReference[oaicite:6]{index=6} :contentReference[oaicite:7]{index=7}
+- Feed failing test outputs/stack traces into the repair loop (during `--max-iters`) to reduce silent behavioral change.
 
 ### 3) Guardrails & constraint-guided refactoring (mid-term)
 - Move toward “generate under constraints”: encode structural/metric constraints as pre/post checks.
