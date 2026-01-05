@@ -155,7 +155,7 @@ Outputs:
 ## Roadmap / Future Work
 
 ### 1) Benchmarks & evaluation (next)
-- Expand the task suite and report metrics beyond compilation (e.g., maintainability/complexity/coupling), plus systematic failure-mode analysis for semantic drift. :contentReference[oaicite:5]{index=5}
+- Expand the task suite and report metrics beyond compilation (e.g., maintainability/complexity/coupling), plus systematic failure-mode analysis for semantic drift.
 
 ### 2) Test-in-the-loop acceptance (planned, opt-in)
 - Add an optional acceptance mode that runs a provided JUnit suite (characterization tests / behavior snapshots) as the success criterion.
@@ -163,10 +163,10 @@ Outputs:
 
 ### 3) Guardrails & constraint-guided refactoring (mid-term)
 - Move toward “generate under constraints”: encode structural/metric constraints as pre/post checks.
-- Integrate compiler + tests + static analysis as verifier feedback; extend guardrails with security-oriented checks to avoid risky patterns. :contentReference[oaicite:8]{index=8}
+- Integrate compiler + tests + static analysis as verifier feedback; extend guardrails with security-oriented checks to avoid risky patterns.
 
 ### 4) Test–code co-evolution (longer-term)
-- Auto-synthesize characterization tests before refactoring, and co-evolve tests + code to lock in behavior under weak test coverage (optionally infer intent/spec from traces/history). :contentReference[oaicite:9]{index=9}
+- Auto-synthesize characterization tests before refactoring, and co-evolve tests + code to lock in behavior under weak test coverage (optionally infer intent/spec from traces/history). 
 
 
 <!-- ## Roadmap / Future Work
