@@ -101,7 +101,9 @@ Edit the `.env` file in the repo root (or copy `.env.example` to `.env`) and fil
 OPENAI_API_KEY=...
 OPENAI_MODEL=gpt-4.1-mini
 OPENAI_BASE_URL=https://api.openai.com
+```
 
+```bash
 python demo_refactor_agent.py \
   --project data/marketing-demo \
   --context-pack context_pack.json \
