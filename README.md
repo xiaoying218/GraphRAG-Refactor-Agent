@@ -93,10 +93,14 @@ python demo_refactor_agent.py \
 ```
 
 **Using an OpenAI-compatible endpoint via env:**
+Configure your LLM key in `.env`
+
+Edit the `.env` file in the repo root (or copy `.env.example` to `.env`) and fill in:
+
 ```bash
-export OPENAI_API_KEY="..."
-export OPENAI_MODEL="gpt-4.1-mini"               # optional
-export OPENAI_BASE_URL="https://api.openai.com"  # optional
+OPENAI_API_KEY=...
+OPENAI_MODEL=gpt-4.1-mini
+OPENAI_BASE_URL=https://api.openai.com
 
 python demo_refactor_agent.py \
   --project data/marketing-demo \
@@ -130,6 +134,10 @@ Outputs:
 - `bench_out/benchmark_report.html`
 
 ---
+
+## Results
+- 📊 Interactive dashboard (GitHub Pages): https://xiaoying218.github.io/GraphRAG-Refactor-Agent/benchmark_dashboard.html
+- 🧾 Detailed report (Markdown): docs/README_REPORT.md
 
 ## Current Status & Limitations
 
