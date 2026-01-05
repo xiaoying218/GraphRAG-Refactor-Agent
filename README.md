@@ -9,7 +9,7 @@ A research-oriented demo system for **safe, verifiable Java refactoring** using 
 
 ## What This Repo Implements (Highlights)
 
-**RefactorGraph-Agent** focuses on *grounded* refactoring rather than “raw prompt → diff”:
+**RefactorGraph-Agent** focuses on *grounded* refactoring:
 
 - **Lightweight Code Knowledge Graph (Tree-sitter + NetworkX)**  
   Builds a structural graph (classes/methods + call/inheritance edges) to reduce “lost-in-context” errors.
@@ -27,16 +27,16 @@ A research-oriented demo system for **safe, verifiable Java refactoring** using 
 
 ---
 
-## Why This Matters (Motivation)
+<!-- ## Why This Matters (Motivation)
 
 LLM-based refactoring commonly fails in industrial codebases due to:
 
 1. **Hallucinated references**: inventing methods/classes or misreading inheritance/call relations under limited context.
 2. **Weak verification**: “looks correct” does not mean “compiles and preserves behavior”.
 
-This project addresses both with **graph-grounded retrieval** (GraphRAG) and a **verification-driven agentic loop**.
+This project addresses both with **graph-grounded retrieval** (GraphRAG) and a **verification-driven agentic loop**. -->
 
----
+
 
 ## System Overview
 
