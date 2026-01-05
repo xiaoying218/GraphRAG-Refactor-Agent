@@ -54,6 +54,7 @@ def main() -> None:
     ap.add_argument("--max-nodes", type=int, default=30)
     ap.add_argument("--max-iters", type=int, default=3)
     ap.add_argument("--dry-llm", action="store_true")
+    ap.add_argument("--accept-mode", default="strict", choices=["strict", "semantic"], help="Acceptance check mode: strict (exact file paths/method ids) or semantic (allow reasonable variations).")
     ap.add_argument(
         "--force-regex-parser",
         action="store_true",
@@ -97,3 +98,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

@@ -31,7 +31,7 @@
         "end_line": 27
       },
       "why": [
-        "focus node",
+        "focus node (exact match or top seed)",
         "seed via vector search (score=1.000)",
         "same class member of CampaignDecisionEngine",
         "shares field EXTERNAL::System.out (READS)",
@@ -465,5 +465,12 @@
     "hops": 2,
     "selected_nodes": 13,
     "selected_edges": 16
-  }
+  },
+  "expected_files": [
+    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+    "src/main/java/com/icbc/marketing/service/RiskControlEngine.java",
+    "src/main/java/com/icbc/marketing/service/RecommendationEngine.java",
+    "src/main/java/com/icbc/marketing/service/StrategyFactory.java"
+  ],
+  "focus_node_after": "CampaignDecisionEngine.decideOffer"
 }

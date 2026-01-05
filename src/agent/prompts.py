@@ -4,11 +4,18 @@ import json
 from typing import Any, Dict, List
 
 
+TRUNCATION_TOKEN = "<TRUNCATED>"
+
 def _trim(s: str, max_chars: int) -> str:
+    """Safely truncate text for prompts without using '...' (which breaks Search/Replace exactness)."""
     if s is None:
         return ""
     s = str(s)
-    return s if len(s) <= max_chars else (s[: max_chars - 3] + "...")
+    if len(s) <= max_chars:
+        return s
+    # Keep as much as possible and append a sentinel token that must NEVER be copied into patches.
+    keep = max(0, max_chars - len(TRUNCATION_TOKEN) - 1)
+    return (s[:keep] + " " + TRUNCATION_TOKEN).rstrip()
 
 
 def context_pack_to_prompt(pack: Dict[str, Any], *, max_nodes: int = 18, max_snippet_chars: int = 2200) -> str:
@@ -71,6 +78,9 @@ Return STRICT JSON only (no markdown, no commentary outside JSON)."""
 
 PLAN_USER_TEMPLATE = """Given the user request and the provided context pack, propose a refactoring plan.
 
+Hard requirements (MUST follow exactly):
+{hard_requirements}
+
 Requirements:
 - The goal is behavior-preserving refactoring.
 - Only modify files that are necessary.
@@ -118,7 +128,9 @@ FILE: <repo-relative-path>
 >>>>>>> REWRITE
 
 RULES:
-- Do NOT use "..." anywhere. Do NOT omit code.
+- Do NOT use "..." anywhere.
+- Do NOT output the token "<TRUNCATED>" anywhere.
+- Do NOT output the token "<TRUNCATED_FILE_CONTENT>" anywhere. Do NOT omit code.
 - Do NOT abbreviate file paths.
 - For Search/Replace: the SEARCH text MUST match EXACTLY ONE occurrence in the current file.
 - Keep changes minimal and behavior-preserving.
@@ -132,6 +144,9 @@ EDIT_USER_TEMPLATE = """Task: {objective}
 Refactoring plan (JSON):
 {plan_json}
 
+Hard requirements (MUST follow exactly):
+{hard_requirements}
+
 Context pack with code excerpts:
 {context}
 
@@ -141,6 +156,8 @@ IMPORTANT:
 - Prefer Search/Replace blocks (stable). Use Full Rewrite only when necessary.
 - If a file is marked MISSING in the prompt, you MUST create it via Full Rewrite.
 - Do NOT use "..." anywhere; do NOT shorten paths or code.
+- Do NOT output the token "<TRUNCATED>" anywhere; it is a prompt sentinel, not code.
+- Do NOT output the token "<TRUNCATED_FILE_CONTENT>" anywhere; it is a prompt sentinel, not code.
 
 If the prompt includes a section named "EXACT REPO FILE CONTENTS (authoritative)", you MUST use that as the source of truth.
 
@@ -171,7 +188,9 @@ FILE: <repo-relative-path>
 >>>>>>> REWRITE
 
 RULES:
-- Do NOT use "..." anywhere. Do NOT omit code.
+- Do NOT use "..." anywhere.
+- Do NOT output the token "<TRUNCATED>" anywhere.
+- Do NOT output the token "<TRUNCATED_FILE_CONTENT>" anywhere. Do NOT omit code.
 - Do NOT abbreviate file paths.
 - For Search/Replace: the SEARCH text MUST match EXACTLY ONE occurrence in the current file.
 - Keep changes minimal and behavior-preserving.
@@ -184,6 +203,9 @@ REPAIR_USER_TEMPLATE = """Task: {objective}
 
 Refactoring plan (JSON):
 {plan_json}
+
+Hard requirements (MUST follow exactly):
+{hard_requirements}
 
 Previous edit instructions (that failed to apply or failed verification):
 {prev_patch}
@@ -200,6 +222,8 @@ IMPORTANT:
 - Prefer Search/Replace blocks (stable). Use Full Rewrite only when necessary.
 - If a file is marked MISSING in the prompt, you MUST create it via Full Rewrite.
 - Do NOT use "..." anywhere; do NOT shorten paths or code.
+- Do NOT output the token "<TRUNCATED>" anywhere; it is a prompt sentinel, not code.
+- Do NOT output the token "<TRUNCATED_FILE_CONTENT>" anywhere; it is a prompt sentinel, not code.
 - If apply failed because SEARCH did not match, adjust the SEARCH blocks to match the exact current file text (include more surrounding context).
 
 If the prompt includes a section named "EXACT REPO FILE CONTENTS (authoritative)", you MUST use that as the source of truth.
@@ -207,3 +231,4 @@ If the prompt includes a section named "EXACT REPO FILE CONTENTS (authoritative)
 Return an UPDATED FULL set of edit instructions that should pass verification.
 Return ONLY the edit instructions.
 """
+

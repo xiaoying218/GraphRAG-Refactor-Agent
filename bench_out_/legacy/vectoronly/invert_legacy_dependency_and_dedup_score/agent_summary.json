@@ -1,8 +1,0 @@
-{
-  "status": "failed",
-  "attempts": 3,
-  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20251227_172603",
-  "artifacts_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20251227_172603/.agent_artifacts",
-  "modified_files": [],
-  "objective": "Refactor the passBasicRiskCheck method to remove its dependency on the deprecated LegacyScoringUtil.calculateBaseScore method while preserving existing behavior. This involves updating the method signature and implementation to use a more maintainable approach."
-}

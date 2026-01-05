@@ -136,3 +136,4 @@ def load_snippet(path: str, start_line: int, end_line: int, max_lines: int = 120
         snippet_lines = head + ["\n... (snippet truncated) ...\n"] + tail
 
     return "".join(snippet_lines)
+

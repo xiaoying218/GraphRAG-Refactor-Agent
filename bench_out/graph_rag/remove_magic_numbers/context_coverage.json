@@ -5,14 +5,18 @@
     "src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java"
   ],
   "found_files": [
-    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java"
-  ],
-  "hit_files": [
-    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java"
-  ],
-  "missing_files": [
-    "src/main/java/com/icbc/marketing/core/ConfigurableThresholds.java",
+    "src/main/java/com/icbc/marketing/DemoRunner.java",
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+    "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
     "src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java"
   ],
-  "coverage": 0.3333333333333333
+  "hit_files": [
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java"
+  ],
+  "missing_files": [
+    "src/main/java/com/icbc/marketing/core/ConfigurableThresholds.java"
+  ],
+  "coverage": 0.6666666666666666
 }

@@ -23,13 +23,19 @@ class ScoredNode:
 
 
 class NodeVectorIndex:
-    def __init__(self) -> None:
+    def __init__(self, project_root: Optional[str] = None, snippet_max_chars: int = 800) -> None:
+        # project_root is optional; when provided we can add small code excerpts to the index text
+        # to improve retrieval for "semantic" queries that don't mention exact symbol names.
+        from pathlib import Path
+
+        self.project_root = Path(project_root) if project_root else None
+        self.snippet_max_chars = int(snippet_max_chars)
+
         self.vectorizer: Optional[TfidfVectorizer] = None
         self.node_ids: List[str] = []
         self.matrix = None  # scipy sparse matrix
 
-    @staticmethod
-    def _node_to_text(node_id: str, attrs: Dict) -> str:
+    def _node_to_text(self, node_id: str, attrs: Dict) -> str:
         parts: List[str] = []
         ntype = attrs.get("type", "Unknown")
         parts.append(f"{ntype} {node_id}")
@@ -44,7 +50,24 @@ class NodeVectorIndex:
             parts.append(f"class {attrs['class']}")
         if attrs.get("file_path"):
             parts.append(f"file {attrs['file_path']}")
+
+            # Add a small excerpt of source text to boost retrieval when names are not sufficient.
+            if self.project_root and attrs.get("start_line") and attrs.get("end_line"):
+                try:
+                    fp = self.project_root / str(attrs["file_path"])
+                    if fp.exists():
+                        lines = fp.read_text(encoding="utf-8", errors="ignore").splitlines()
+                        s = max(0, int(attrs["start_line"]) - 1)
+                        e = min(len(lines), int(attrs["end_line"]))
+                        excerpt = "\n".join(lines[s:e])
+                        if len(excerpt) > self.snippet_max_chars:
+                            excerpt = excerpt[: self.snippet_max_chars] + " <SNIPPET_TRUNCATED>"
+                        parts.append(excerpt)
+                except Exception:
+                    pass
+
         return normalize_code_text(" ".join(parts))
+
 
     def build_from_graph(self, graph) -> None:
         texts: List[str] = []
@@ -83,3 +106,4 @@ class NodeVectorIndex:
             if len(out) >= top_k:
                 break
         return out
+

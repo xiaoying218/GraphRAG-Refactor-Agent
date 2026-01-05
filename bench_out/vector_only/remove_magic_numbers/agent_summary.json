@@ -1,12 +1,14 @@
 {
   "status": "success",
-  "attempts": 2,
-  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_160004",
-  "artifacts_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_160004/.agent_artifacts",
+  "attempts": 1,
+  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_072459",
+  "artifacts_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_072459/.agent_artifacts",
   "modified_files": [
+    "src/main/java/com/icbc/marketing/core/ConfigurableThresholds.java",
     "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
-    "src/main/resources/application.properties",
+    "src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java",
     "target/classes/com/icbc/marketing/DemoRunner.class",
+    "target/classes/com/icbc/marketing/core/ConfigurableThresholds.class",
     "target/classes/com/icbc/marketing/core/LegacyScoringUtil.class",
     "target/classes/com/icbc/marketing/service/CampaignDecisionEngine.class",
     "target/classes/com/icbc/marketing/strategy/AbstractBaseStrategy.class",

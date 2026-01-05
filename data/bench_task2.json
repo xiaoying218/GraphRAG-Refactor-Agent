@@ -1,0 +1,15 @@
+{
+  "tasks": [
+    {
+      "name": "introduce_region_context",
+      "description": "修改 calculateBaseScore() 方法，支持 Region 上下文的传入，而不是硬编码参数",
+      "focus_node": "LegacyScoringUtil.calculateBaseScore",
+      "focus_node_after": "ScoringService.calculateBaseScoreWithRegion",
+      "query": "LegacyScoringUtil.calculateBaseScore",
+      "expected_files": [
+        "src/main/java/com/icbc/marketing/core/ScoringService.java"
+      ],
+      "request": "需求：为 base score 引入 Region 上下文，作为一等公民参与计算（支持默认 Region），而不是依赖 Map 随意塞 key。\n验收：不修改 DemoRunner 默认输入时输出保持不变；新增 Region 后可通过传入不同 Region 触发不同口径（可先预留接口/分支）。\n约束：保持向后兼容（原有调用仍可工作/可标记 deprecated），避免大范围破坏式改动。"
+    }
+  ]
+}

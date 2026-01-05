@@ -1061,3 +1061,4 @@ class JavaCodeParser:
                     })
 
         return relationships
+

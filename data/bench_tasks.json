@@ -43,7 +43,7 @@
       "description": "去除硬编码的 magic number 和阈值，改为配置驱动的方式",
       "focus_node": "LegacyScoringUtil.calculateBaseScore",
       "focus_node_after": "LegacyScoringUtil.calculateBaseScore",
-      "query": "GOLDEN_RATIO",
+      "query": "LegacyScoringUtil.calculateBaseScore",
       "expected_files": [
         "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
         "src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java",

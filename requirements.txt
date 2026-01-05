@@ -3,4 +3,4 @@ numpy>=1.23
 scikit-learn>=1.2
 tree-sitter>=0.21
 tree_sitter_java>=0.21
-pyvis>=0.3  # optional, only if you want HTML visualization
+pyvis>=0.3

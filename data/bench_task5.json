@@ -1,0 +1,17 @@
+{
+  "tasks": [
+    {
+      "name": "consolidate_base_score_computation",
+      "description": "合并重复的 baseScore 计算逻辑，避免在多个地方重复计算，提升性能与一致性",
+      "focus_node": "AbstractBaseStrategy.passBasicRiskCheck",
+      "focus_node_after": "ScoringService.computeBaseScoreForRiskCheck",
+      "query": "LegacyScoringUtil.calculateBaseScore",
+      "expected_files": [
+        "src/main/java/com/icbc/marketing/core/ScoringService.java",
+        "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+        "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java"
+      ],
+      "request": "需求：消除 baseScore 在引擎层与策略层的重复计算，保证一次决策只计算一次并复用同一口径。\n验收：输出不变；代码中不再出现同一决策链路的重复算分调用（可通过缓存到上下文/决策对象）。\n约束：复用方式应对未来扩展（如 Region 上下文）友好，避免再次散落计算逻辑。"
+    }
+  ]
+}

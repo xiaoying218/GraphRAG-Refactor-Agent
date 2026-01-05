@@ -45,7 +45,7 @@ def main() -> None:
     graph = builder.get_graph()
 
     print("🧠 Building vector index (TF-IDF)...")
-    vindex = NodeVectorIndex()
+    vindex = NodeVectorIndex(project_root=str(project_root))
     vindex.build_from_graph(graph)
 
     engine = GraphRAGContextEngine(graph, vindex)
@@ -85,3 +85,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

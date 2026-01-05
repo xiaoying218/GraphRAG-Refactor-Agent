@@ -5,6 +5,12 @@ from pathlib import Path
 # ================= 配置区域 =================
 # 你的 bench_out 输出目录名称
 BENCH_OUT_DIR = "bench_out"
+
+# 🔴 关键修改：在这里指定你想合并的任务名称
+# 如果想合并所有任务，请留空： TARGET_TASK_NAME = "" 或 TARGET_TASK_NAME = None
+# 如果只想合并特定任务，填入名称： TARGET_TASK_NAME = "remove_magic_numbers"
+TARGET_TASK_NAME = "remove_magic_numbers"
+
 # 最终生成的合并文件名称
 OUTPUT_FILE = "merged_refactor_debug_log.txt"
 # ===========================================
@@ -38,9 +44,19 @@ def main():
         return
 
     print(f"📂 开始扫描 {bench_path}...")
+    if TARGET_TASK_NAME:
+        print(f"🎯 过滤模式开启：只合并包含 '{TARGET_TASK_NAME}' 的任务")
+    else:
+        print(f"🔄 全量模式开启：合并所有任务")
     
+    found_count = 0
+
     with open(OUTPUT_FILE, 'w', encoding='utf-8') as outfile:
-        outfile.write(f"Refactoring Agent Debug Log\nGenerated Time: {os.times()}\n\n")
+        outfile.write(f"Refactoring Agent Debug Log\nGenerated Time: {os.times()}\n")
+        if TARGET_TASK_NAME:
+            outfile.write(f"Filter: Only showing tasks matching '{TARGET_TASK_NAME}'\n\n")
+        else:
+            outfile.write("Filter: All Tasks\n\n")
 
         # 遍历 bench_out 下的所有模式 (例如 graph_rag, vector_only)
         for mode_dir in bench_path.iterdir():
@@ -55,7 +71,13 @@ def main():
                 task_name = task_dir.name
                 mode_name = mode_dir.name
                 
-                print(f"  Processing Task: [{mode_name}] {task_name}")
+                # --- 🔍 过滤逻辑在这里 ---
+                if TARGET_TASK_NAME and (TARGET_TASK_NAME not in task_name):
+                    continue
+                # -----------------------
+
+                found_count += 1
+                print(f"  ✅ Found Task: [{mode_name}] {task_name}")
                 
                 write_separator(outfile, f"TASK: {task_name} (Mode: {mode_name})", char="#")
 
@@ -76,12 +98,9 @@ def main():
                                 data = json.loads(content)
                                 if "artifacts_dir" in data:
                                     raw_path = data["artifacts_dir"]
-                                    # 处理绝对路径，如果在这台机器上跑，绝对路径通常是有效的
-                                    # 如果绝对路径无效，尝试将其视为相对路径或寻找项目内的对应路径
                                     artifacts_path = Path(raw_path)
+                                    # 回退机制：如果绝对路径找不到，尝试在当前项目下找
                                     if not artifacts_path.exists():
-                                        # 尝试一种回退机制：假设 artifacts 在项目根目录的 .refactor_agent_runs 下
-                                        # 提取路径中 .refactor_agent_runs 之后的部分
                                         parts = raw_path.split(".refactor_agent_runs")
                                         if len(parts) > 1:
                                             artifacts_path = root_path / ".refactor_agent_runs" / parts[1].strip(os.sep)
@@ -92,12 +111,9 @@ def main():
                 if artifacts_path and artifacts_path.exists():
                     outfile.write(f"--- [Artifacts Dir] {artifacts_path} ---\n\n")
                     
-                    # 获取该目录下所有文件并排序
-                    # 排序很重要，为了让 step1, step2 按顺序显示
                     artifact_files = sorted([f for f in artifacts_path.iterdir() if f.is_file()])
                     
-                    # 定义我们关心的文件优先级，确保重要的先展示
-                    # 比如 plan.json 最先，summary.json 最后，中间是步骤
+                    # 排序优先级
                     def sort_key(f):
                         name = f.name
                         if "plan.json" in name: return 0
@@ -109,13 +125,10 @@ def main():
                     artifact_files.sort(key=sort_key)
 
                     for art_file in artifact_files:
-                        # 跳过一些不需要的二进制文件或过大的文件
                         if art_file.suffix not in ['.json', '.txt', '.diff', '.log', '.md', '.py', '.java']:
                             continue
                         
-                        # 读取内容
                         content = read_file_content(art_file)
-                        
                         outfile.write(f"📄 FILE: {art_file.name}\n")
                         outfile.write("-" * 20 + "\n")
                         outfile.write(content)
@@ -123,7 +136,10 @@ def main():
                 else:
                     outfile.write(f"⚠️ Warning: Artifacts directory not found or inaccessible: {artifacts_path}\n")
 
-    print(f"\n✅ 合并完成！文件已保存至: {Path(OUTPUT_FILE).absolute()}")
+    if found_count == 0:
+        print(f"\n⚠️ 未找到任何包含 '{TARGET_TASK_NAME}' 的任务。请检查名称拼写。")
+    else:
+        print(f"\n✅ 合并完成！共处理 {found_count} 个任务。文件已保存至: {Path(OUTPUT_FILE).absolute()}")
 
 if __name__ == "__main__":
     main()

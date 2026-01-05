@@ -66,7 +66,7 @@ def _build_graph_and_index(project_root: str, *, prefer_tree_sitter: bool = True
     builder.build_from_parsed_data(data)
     graph = builder.get_graph()
 
-    vindex = NodeVectorIndex()
+    vindex = NodeVectorIndex(project_root=project_root)
     vindex.build_from_graph(graph)
     return graph, vindex
 
@@ -247,3 +247,4 @@ def run_benchmark(
 
     (out_dir / "benchmark_results.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     return results
+

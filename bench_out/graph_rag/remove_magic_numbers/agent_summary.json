@@ -1,9 +1,19 @@
 {
-  "status": "failed",
-  "attempts": 3,
-  "failed_step": 1,
-  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_154913",
-  "artifacts_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_154913/.agent_artifacts",
-  "modified_files": [],
+  "status": "success",
+  "attempts": 1,
+  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_071424",
+  "artifacts_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_071424/.agent_artifacts",
+  "modified_files": [
+    "src/main/java/com/icbc/marketing/core/ConfigurableThresholds.java",
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java",
+    "target/classes/com/icbc/marketing/DemoRunner.class",
+    "target/classes/com/icbc/marketing/core/ConfigurableThresholds.class",
+    "target/classes/com/icbc/marketing/core/LegacyScoringUtil.class",
+    "target/classes/com/icbc/marketing/service/CampaignDecisionEngine.class",
+    "target/classes/com/icbc/marketing/strategy/AbstractBaseStrategy.class",
+    "target/classes/com/icbc/marketing/strategy/IPromotionStrategy.class",
+    "target/classes/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.class"
+  ],
   "objective": "需求：移除算分与策略中的 magic number / hard-code 规则，将阈值与权重配置化（并让配置真正生效）。\n验收：默认配置下输出不变；修改配置（如 strategy.vip.threshold 或算分权重）能影响决策结果。\n约束：配置读取需健壮（找不到配置时回退默认值），不引入新依赖。"
 }

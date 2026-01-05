@@ -1,18 +1,19 @@
 {
-  "status": "failed_acceptance",
+  "status": "success",
   "attempts": 1,
   "objective": "需求：为 base score 引入 Region 上下文，作为一等公民参与计算（支持默认 Region），而不是依赖 Map 随意塞 key。\n验收：不修改 DemoRunner 默认输入时输出保持不变；新增 Region 后可通过传入不同 Region 触发不同口径（可先预留接口/分支）。\n约束：保持向后兼容（原有调用仍可工作/可标记 deprecated），避免大范围破坏式改动。",
   "modified_files": [
     "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "src/main/java/com/icbc/marketing/core/ScoringService.java",
     "target/classes/com/icbc/marketing/DemoRunner.class",
-    "target/classes/com/icbc/marketing/core/LegacyScoringUtil$Region.class",
     "target/classes/com/icbc/marketing/core/LegacyScoringUtil.class",
+    "target/classes/com/icbc/marketing/core/ScoringService.class",
     "target/classes/com/icbc/marketing/service/CampaignDecisionEngine.class",
     "target/classes/com/icbc/marketing/strategy/AbstractBaseStrategy.class",
     "target/classes/com/icbc/marketing/strategy/IPromotionStrategy.class",
     "target/classes/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.class"
   ],
-  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_155655",
+  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_072200",
   "allowed_commands": [
     "ls",
     "cat",
@@ -60,7 +61,15 @@
     "loc_non_empty": 5,
     "cyclomatic": 1
   },
-  "post_focus_method": null,
+  "post_focus_method": {
+    "method_id": "ScoringService.calculateBaseScoreWithRegion",
+    "file_path": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_072200/src/main/java/com/icbc/marketing/core/ScoringService.java",
+    "start_line": 19,
+    "end_line": 26,
+    "loc": 8,
+    "loc_non_empty": 5,
+    "cyclomatic": 1
+  },
   "pre_project_maintainability": {
     "methods": 13,
     "avg_loc": 9.0,
@@ -78,17 +87,17 @@
   },
   "post_project_maintainability": {
     "methods": 15,
-    "avg_loc": 8.0,
+    "avg_loc": 8.4,
     "avg_cyclomatic": 1.4666666666666666,
     "p95_loc": 34.3,
     "p95_cyclomatic": 3.599999999999998,
     "max_loc": 35,
     "max_cyclomatic": 5,
     "duplication": {
-      "total_lines": 191,
-      "duplicate_lines": 59,
-      "duplicate_line_ratio": 0.3089005235602094,
-      "distinct_lines": 139
+      "total_lines": 184,
+      "duplicate_lines": 70,
+      "duplicate_line_ratio": 0.3804347826086957,
+      "distinct_lines": 126
     }
   },
   "pre_change_risk": {
@@ -109,13 +118,20 @@
   },
   "post_change_risk": {
     "focus_node": "ScoringService.calculateBaseScoreWithRegion",
-    "fan_in": 0,
-    "fan_out": 0,
-    "upstream_depth_max": 0,
-    "downstream_depth_max": 0,
-    "impacted_nodes_upstream": 0,
-    "impacted_nodes_downstream": 0,
-    "impacted_files": []
+    "fan_in": 1,
+    "fan_out": 1,
+    "upstream_depth_max": 4,
+    "downstream_depth_max": 1,
+    "impacted_nodes_upstream": 6,
+    "impacted_nodes_downstream": 1,
+    "impacted_files": [
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_072200/src/main/java/com/icbc/marketing/DemoRunner.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_072200/src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_072200/src/main/java/com/icbc/marketing/core/ScoringService.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_072200/src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_072200/src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
+      "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_072200/src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java"
+    ]
   },
   "pre_impacted_files": [
     "src/main/java/com/icbc/marketing/DemoRunner.java",
@@ -124,10 +140,19 @@
     "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
     "src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java"
   ],
-  "post_impacted_files": [],
-  "accept_ok": false,
-  "accept_reasons": [
-    "post_focus_method_missing",
-    "missing_expected_files: src/main/java/com/icbc/marketing/core/ScoringService.java"
-  ]
+  "post_impacted_files": [
+    "src/main/java/com/icbc/marketing/DemoRunner.java",
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "src/main/java/com/icbc/marketing/core/ScoringService.java",
+    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+    "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
+    "src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java"
+  ],
+  "accept_mode": "strict",
+  "accept_ok": true,
+  "accept_reasons": [],
+  "accept_strict_ok": true,
+  "accept_strict_reasons": [],
+  "accept_semantic_ok": true,
+  "accept_semantic_reasons": []
 }

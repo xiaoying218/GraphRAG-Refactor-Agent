@@ -1,14 +1,15 @@
 {
   "status": "success",
-  "attempts": 5,
-  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_154223",
-  "artifacts_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_154223/.agent_artifacts",
+  "attempts": 1,
+  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_070701",
+  "artifacts_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_070701/.agent_artifacts",
   "modified_files": [
     "src/main/java/com/icbc/marketing/DemoRunner.java",
     "src/main/java/com/icbc/marketing/core/LegacyScoringAdapter.java",
     "src/main/java/com/icbc/marketing/core/ScoringService.java",
     "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
     "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java",
+    "src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java",
     "target/classes/com/icbc/marketing/DemoRunner.class",
     "target/classes/com/icbc/marketing/core/LegacyScoringAdapter.class",
     "target/classes/com/icbc/marketing/core/LegacyScoringUtil.class",

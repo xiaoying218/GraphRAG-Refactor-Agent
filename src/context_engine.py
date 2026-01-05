@@ -109,20 +109,82 @@ class GraphRAGContextEngine:
             if role:
                 roles[nid].add(role)
 
+        # # If query is an exact node id, mark it as focus; otherwise take top seed.
+        # focus_node_id = query if query in self.graph else (seeds[0].node_id if seeds else "")
+
+        # # Always include focus (even when it is not selected by seeds for some reason).
+        # if focus_node_id:
+        #     add(focus_node_id, "focus node", role="focus")
+
+        # # 1) add seed nodes
+        # for s in seeds:
+        #     add(s.node_id, f"seed via vector search (score={s.score:.3f})", role="seed")
+
+        # # 2) call graph expansion: separate callees vs callers (IDE-like preview)
+        # callees = self._expand_relation_dir([focus_node_id], relation="CALLS", hops=hops, direction="out")
+        # callers = self._expand_relation_dir([focus_node_id], relation="CALLS", hops=hops, direction="in")
+        # src/context_engine.py — GraphRAGContextEngine.query
+
+        # focus_node_id = query if query in self.graph else (seeds[0].node_id if seeds else "")
+        # related_nodes = {focus_node_id} if focus_node_id else set()
+
+        # # --- NEW: Field -> Method bridge ---
+        # focus_is_field = False
+        # if focus_node_id:
+        #     node_type = (self.graph.nodes[focus_node_id].get("type") or "").lower()
+        #     focus_is_field = (node_type == "field") or (focus_node_id in self.field_to_methods)
+
+        # field_usage_methods = []
+        # if focus_is_field:
+        #     field_usage_methods = sorted(self.field_to_methods.get(focus_node_id, []))
+        #     # 把使用该 Field 的 Methods 先拉进 related_nodes（也可用你现有的 add() 给 role/why）
+        #     for mid in field_usage_methods:
+        #         if mid in self.graph:
+        #             related_nodes.add(mid)
+
+        # # 用 methods 作为 CALLS 扩展起点（否则从 Field 出发基本扩不出调用图）
+        # call_roots = field_usage_methods if (focus_is_field and field_usage_methods) else [focus_node_id]
+
+        # callees = self._expand_relation_dir(call_roots, relation="CALLS", direction="out", max_depth=hops, max_nodes=max_nodes)
+        # callers = self._expand_relation_dir(call_roots, relation="CALLS", direction="in",  max_depth=hops, max_nodes=max_nodes)
+
         # If query is an exact node id, mark it as focus; otherwise take top seed.
-        focus_node_id = query if query in self.graph else (seeds[0].node_id if seeds else "")
-
-        # Always include focus (even when it is not selected by seeds for some reason).
+        raw_focus_id = query if query in self.graph else (seeds[0].node_id if seeds else "")
+        
+        # --- Field -> Method bridge ---
+        # If the focus is a Field (e.g., GOLDEN_RATIO), jump back to Methods that READ/WRITE it.
+        focus_node_id = raw_focus_id
+        focus_field_id: Optional[str] = None
+        field_usage_methods: List[str] = []
         if focus_node_id:
-            add(focus_node_id, "focus node", role="focus")
-
-        # 1) add seed nodes
+            node_type = (self.graph.nodes[focus_node_id].get("type") or "").lower()
+            focus_is_field = (node_type == "field") or (focus_node_id in self.field_to_methods)
+            if focus_is_field:
+                focus_field_id = focus_node_id
+                field_usage_methods = sorted([m for m in self.field_to_methods.get(focus_field_id, []) if m in self.graph])
+                # Prefer a Method node as the focus for downstream expansions.
+                method_candidates = [m for m in field_usage_methods if (self.graph.nodes[m].get("type") or "").lower() == "method"]
+                if method_candidates:
+                    focus_node_id = method_candidates[0]
+                elif field_usage_methods:
+                    focus_node_id = field_usage_methods[0]
+        
+        # Always include focus + seed nodes in the selection set.
+        if focus_node_id:
+            add(focus_node_id, "focus node (exact match or top seed)", role="focus")
         for s in seeds:
             add(s.node_id, f"seed via vector search (score={s.score:.3f})", role="seed")
+        if focus_field_id:
+            add(focus_field_id, "focus field (matched by query) – expanded to usage methods", role="seed")
+            for mid in field_usage_methods:
+                add(mid, f"uses field {focus_field_id}", role="field_user")
+        
+        # Call graph expansion (IDE-like preview): separate callees vs callers
+        call_roots = field_usage_methods if field_usage_methods else ([focus_node_id] if focus_node_id else [])
+        callees = self._expand_relation_dir(call_roots, relation="CALLS", hops=hops, direction="out")
+        callers = self._expand_relation_dir(call_roots, relation="CALLS", hops=hops, direction="in")
 
-        # 2) call graph expansion: separate callees vs callers (IDE-like preview)
-        callees = self._expand_relation_dir([focus_node_id], relation="CALLS", hops=hops, direction="out")
-        callers = self._expand_relation_dir([focus_node_id], relation="CALLS", hops=hops, direction="in")
+
         for nid, depth in callees.items():
             add(nid, f"call-graph neighbor (CALLEE, depth={depth})", role="callee")
         for nid, depth in callers.items():
@@ -200,6 +262,7 @@ class GraphRAGContextEngine:
         role_priority = {
             "focus": 0,
             "seed": 1,
+            "field_user": 2,
             "callee": 2,
             "caller": 2,
             "shared_field_writer": 3,
@@ -445,3 +508,4 @@ class GraphRAGContextEngine:
             highlight_span=highlight_span,
             why=why,
         )
+

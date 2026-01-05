@@ -297,3 +297,4 @@ def list_target_files(diff_text: str) -> List[str]:
         if target_rel and target_rel not in out:
             out.append(target_rel)
     return out
+

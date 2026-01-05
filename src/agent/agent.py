@@ -45,7 +45,7 @@ class AgentConfig:
     # - monolithic: one large patch per attempt (original behavior)
     # - stepwise: split into small steps (recommended; improves patch applicability and reduces truncation)
     execution_mode: str = "stepwise"  # "monolithic" or "stepwise"
-    step_max_files: int = 1           # when auto-splitting, max files per step
+    step_max_files: int = 10           # when auto-splitting, max files per step
     verify_each_step: bool = True     # run verification after each step
     enforce_file_whitelist: bool = True  # prevent edits outside plan files_to_change
     allow_new_files: bool = True      # allow creating new files via Full Rewrite
@@ -415,7 +415,8 @@ class RefactoringAgent:
         rel_files = [x for x in rel_files if not (x in seen or seen.add(x))]
 
         blocks = []
-        for rel in rel_files[:6]:
+        max_files = len(rel_files) if only_files else max(6, self.cfg.step_max_files)
+        for rel in rel_files[:max_files]:
             p = (self.work_dir / rel).resolve()
             if not str(p).startswith(str(self.work_dir)):
                 continue
@@ -429,9 +430,40 @@ class RefactoringAgent:
                 continue
             txt = p.read_text(encoding="utf-8", errors="replace")
             if len(txt) > max_chars_per_file:
-                txt = txt[:max_chars_per_file] + "\n/* ... TRUNCATED ... */\n"
+                txt = txt[:max_chars_per_file] + "\n/* <TRUNCATED_FILE_CONTENT> */\n"
             blocks.append(f"\n--- FILE: {rel} ---\n{txt}\n--- END FILE: {rel} ---\n")
         return "\n".join(blocks)
+
+
+    def _is_safe_repo_path(self, p: str) -> bool:
+        """Conservative filter: only allow expanding scope to real source files."""
+        if not p:
+            return False
+        p = p.replace("\\", "/").lstrip("./")
+        # block path traversal
+        if ".." in Path(p).parts:
+            return False
+        # adjust prefixes as needed for your repos
+        return p.startswith(("src/", "lib/", "app/", "tests/", "test/"))
+
+    def _extract_apply_search_mismatch_files(self, logs: str) -> List[str]:
+        """Extract file paths from edit-apply errors like 'SEARCH block not found in <file>'"""
+        if not logs:
+            return []
+        paths = re.findall(r"\[EDIT APPLY ERROR\] SEARCH block not found in ([^\s]+)", logs)
+        out: List[str] = []
+        seen = set()
+        for p in paths:
+            p = (p or "").strip()
+            if not p:
+                continue
+            # normalize
+            p = p.replace("\\", "/").lstrip("./")
+            if p in seen:
+                continue
+            seen.add(p)
+            out.append(p)
+        return out
 
     # ---------------------------
     # Plan / Edit / Repair
@@ -445,7 +477,7 @@ class RefactoringAgent:
         )
         messages = [
             {"role": "system", "content": PLAN_SYSTEM},
-            {"role": "user", "content": PLAN_USER_TEMPLATE.format(request=request, context=context_txt)},
+            {"role": "user", "content": PLAN_USER_TEMPLATE.format(request=request, context=context_txt, hard_requirements=self._hard_requirements_text(context_pack))},
         ]
         out = self.llm.chat(messages, temperature=0.1, max_tokens=1400)
         plan = self._extract_json(out)
@@ -476,13 +508,13 @@ class RefactoringAgent:
                         chunks.append(f"[TOOL rg ERROR] {e}\n[TOOL grep ERROR] {e2}")
         return "\n\n".join(chunks)
 
-    def _edit(self, *, objective: str, plan: Dict[str, Any], context_pack: Dict[str, Any], extra_tool_info: str = "") -> str:
+    def _edit(self, *, objective: str, plan: Dict[str, Any], context_pack: Dict[str, Any], extra_tool_info: str = "", only_files: Optional[List[str]] = None) -> str:
         context_txt = context_pack_to_prompt(
             context_pack,
             max_nodes=self.cfg.max_nodes_in_prompt,
             max_snippet_chars=self.cfg.max_snippet_chars,
         )
-        file_dump = self._dump_files_for_prompt(plan, context_pack)
+        file_dump = self._dump_files_for_prompt(plan, context_pack, only_files=only_files)
         if file_dump:
             context_txt += "\n\n=== EXACT REPO FILE CONTENTS (authoritative) ===\n" + file_dump + "\n=== END EXACT FILE CONTENTS ===\n"
         if extra_tool_info:
@@ -491,18 +523,18 @@ class RefactoringAgent:
         plan_json = json.dumps(plan, ensure_ascii=False, indent=2)
         messages = [
             {"role": "system", "content": EDIT_SYSTEM},
-            {"role": "user", "content": EDIT_USER_TEMPLATE.format(objective=objective, plan_json=plan_json, context=context_txt)},
+            {"role": "user", "content": EDIT_USER_TEMPLATE.format(objective=objective, plan_json=plan_json, context=context_txt, hard_requirements=self._hard_requirements_text(context_pack))},
         ]
         patch = self.llm.chat(messages, temperature=0.2, max_tokens=self.cfg.edit_max_tokens)
         return (patch or "").strip()
 
-    def _repair(self, *, objective: str, plan: Dict[str, Any], context_pack: Dict[str, Any], prev_patch: str, verify_logs: str, extra_tool_info: str = "") -> str:
+    def _repair(self, *, objective: str, plan: Dict[str, Any], context_pack: Dict[str, Any], prev_patch: str, verify_logs: str, extra_tool_info: str = "", only_files: Optional[List[str]] = None) -> str:
         context_txt = context_pack_to_prompt(
             context_pack,
             max_nodes=self.cfg.max_nodes_in_prompt,
             max_snippet_chars=self.cfg.max_snippet_chars,
         )
-        file_dump = self._dump_files_for_prompt(plan, context_pack)
+        file_dump = self._dump_files_for_prompt(plan, context_pack, only_files=only_files)
         if file_dump:
             context_txt += "\n\n=== EXACT REPO FILE CONTENTS (authoritative) ===\n" + file_dump + "\n=== END EXACT FILE CONTENTS ===\n"
         if extra_tool_info:
@@ -516,7 +548,8 @@ class RefactoringAgent:
                 plan_json=plan_json,
                 prev_patch=prev_patch,
                 verify_logs=verify_logs,
-                context=context_txt
+                context=context_txt,
+                hard_requirements=self._hard_requirements_text(context_pack)
             )},
         ]
         patch = self.llm.chat(messages, temperature=0.2, max_tokens=self.cfg.repair_max_tokens)
@@ -584,6 +617,16 @@ class RefactoringAgent:
         rel_files = [x for x in rel_files if not (x in seen or seen.add(x))]
         return rel_files
 
+    def _compute_allowed_files(self, plan: Dict[str, Any], context_pack: Dict[str, Any]) -> List[str]:
+        allowed = self._allowed_files_from_plan(plan)
+        for ef in (context_pack.get("expected_files") or []):
+            if isinstance(ef, str) and ef.strip():
+                allowed.append(ef.strip())
+        # de-dup keep order
+        seen: set[str] = set()
+        return [x for x in allowed if not (x in seen or seen.add(x))]
+
+
     def _enforce_changed_files_whitelist(self, allowed: List[str]) -> Tuple[bool, str]:
         if not self.cfg.enforce_file_whitelist:
             return True, ""
@@ -623,7 +666,58 @@ class RefactoringAgent:
         return f"\n[FILE EXCERPT] {resolved} around line {line_no}\n{excerpt}\n"
 
 
-    # ---------------------------
+    
+    def _hard_requirements_text(self, context_pack: Dict[str, Any]) -> str:
+        """Build strict, machine-checkable constraints to reduce 'guess-the-naming' failure modes."""
+        lines: List[str] = []
+        expected = context_pack.get("expected_files") or []
+        expected = [str(x).strip() for x in expected if str(x).strip()]
+        if expected:
+            lines.append(f"- These files MUST exist at EXACT repo-relative paths after the refactor (do not rename/move):")
+            for p in expected:
+                lines.append(f"  - {p}")
+            lines.append("- Do NOT satisfy expected files by using inner/nested classes; create top-level files at the exact paths.")
+        focus_after = str(context_pack.get("focus_node_after") or "").strip()
+        if focus_after:
+            lines.append(f"- The post-refactor code MUST contain this method id exactly: {focus_after}")
+            lines.append("  - Do not rename the class or method in that id. If you move code, keep this API as an adapter/wrapper.")
+        if not lines:
+            return "- (none)"
+        return "\n".join(lines)
+
+    def _extract_compiler_error_files(self, logs: str) -> List[str]:
+        """Heuristically extract repo-relative file paths from compiler/test logs (javac/maven/gradle)."""
+        if not logs:
+            return []
+        out: List[str] = []
+        # Common patterns:
+        # 1) javac: /abs/path/Foo.java:123: error:
+        # 2) javac: src/main/java/.../Foo.java:123: error:
+        # 3) maven: [ERROR] /abs/path/Foo.java:[123,45] cannot find symbol
+        patterns = [
+            r"(?P<path>(?:[A-Za-z]:)?[^\s:]+?\.java):(?P<line>\d+):\s*error",
+            r"\[ERROR\]\s+(?P<path>(?:[A-Za-z]:)?[^\s:]+?\.java):\[(?P<line>\d+),\d+\]",
+        ]
+        for pat in patterns:
+            for m in re.finditer(pat, logs):
+                p = (m.group("path") or "").strip()
+                if not p:
+                    continue
+                # Normalize to repo-relative if possible
+                p_norm = p.replace("\\", "/")
+                wd = str(self.work_dir).replace("\\", "/").rstrip("/")
+                if p_norm.startswith(wd + "/"):
+                    p_norm = p_norm[len(wd) + 1 :]
+                # Filter build outputs (target/, build/) unless it's in source tree
+                if "/target/" in p_norm or p_norm.startswith("target/") or "/build/" in p_norm or p_norm.startswith("build/"):
+                    # ignore compiled artifacts
+                    continue
+                if p_norm not in out:
+                    out.append(p_norm)
+        return out
+
+
+# ---------------------------
     # Apply LLM edits (Search/Replace Blocks or Full Rewrite)
     # ---------------------------
 
@@ -970,13 +1064,7 @@ class RefactoringAgent:
         baseline_rev = self._git_head_hash()
 
         # Planned/allowed files (also include expected_files from context_pack if present)
-        allowed_files = self._allowed_files_from_plan(plan)
-        for ef in (context_pack.get("expected_files") or []):
-            if isinstance(ef, str) and ef.strip():
-                allowed_files.append(ef.strip())
-        # de-dup
-        seen = set()
-        allowed_files = [x for x in allowed_files if not (x in seen or seen.add(x))]
+        allowed_files = self._compute_allowed_files(plan, context_pack)
 
         modified_files: List[str] = []
 
@@ -1019,12 +1107,52 @@ class RefactoringAgent:
                     prev_patch = patch
                     continue
 
-                ok_scope, scope_logs = self._enforce_changed_files_whitelist(allowed_files)
+                ok_scope, scope_logs = self._enforce_changed_files_whitelist(
+    self._compute_allowed_files(step_plan, context_pack)
+)
+
                 if not ok_scope:
-                    (artifacts / f"scope_attempt_{it}.txt").write_text(scope_logs, encoding="utf-8")
-                    last_logs = scope_logs
-                    prev_patch = patch
-                    continue
+                    (artifacts / f"scope_step{si}_attempt{it}.txt").write_text(scope_logs, encoding="utf-8")
+
+                    # 解析 out-of-scope
+                    m = re.search(r"Out-of-scope:\s*\[(.*?)\]", scope_logs, flags=re.DOTALL)
+                    oos_paths = re.findall(r"'([^']+)'", m.group(0)) if m else []
+
+                    found_set = set((context_pack or {}).get("found_files") or [])
+                    candidates = []
+                    for p in oos_paths:
+                        p = (p or "").strip()
+                        if not p:
+                            continue
+                        # ✅ 建议用 work_dir 判断是否存在（而不是 project_dir）
+                        if (p in found_set) or (self._is_safe_repo_path(p) and (self.work_dir / p).exists()):
+                            candidates.append(p)
+
+                    candidates = list(dict.fromkeys(candidates))
+                    if candidates:
+                        scope_expanded_files = list(dict.fromkeys(scope_expanded_files + candidates))
+                        allowed_union = list(dict.fromkeys((files_in_step or []) + scope_expanded_files))
+                        step_plan["files_to_change"] = [{"file_path": p} for p in allowed_union]
+
+                        # ✅ 关键：扩容后立刻复查 scope（不要直接 continue）
+                        ok2, scope_logs2 = self._enforce_changed_files_whitelist(
+                            self._compute_allowed_files(step_plan, context_pack)
+                        )
+                        if ok2:
+                            (artifacts / f"scope_step{si}_attempt{it}_expanded.txt").write_text(
+                                scope_logs + "\n\n[ALLOWLIST EXPANDED]\n" + scope_logs2,
+                                encoding="utf-8",
+                            )
+                            # ✅ 继续往下走 verify/commit
+                        else:
+                            step_last_logs = scope_logs2
+                            step_prev_patch = patch
+                            continue
+                    else:
+                        step_last_logs = scope_logs
+                        step_prev_patch = patch
+                        continue
+
 
                 verify_ok, verify_logs = self._verify(plan)
                 (artifacts / f"verify_attempt_{it}.txt").write_text(verify_logs, encoding="utf-8")
@@ -1070,6 +1198,10 @@ class RefactoringAgent:
             if focus_fp:
                 step_files.append(focus_fp)
 
+        # Keep a stable "global" allowlist from the original plan (avoid chunking-induced scope errors)
+        global_plan_files = list(dict.fromkeys(step_files))
+
+
         # chunk by step_max_files
         chunk = max(1, int(self.cfg.step_max_files or 1))
         steps: List[List[str]] = [step_files[i:i+chunk] for i in range(0, len(step_files), chunk)]
@@ -1080,16 +1212,21 @@ class RefactoringAgent:
             step_start_rev = self._git_head_hash()
             step_prev_patch = ""
             step_last_logs = ""
+            scope_expanded_files: List[str] = []
 
             step_objective = objective
             if files_in_step:
-                step_objective += f"\n\n[STEP {si}/{len(steps)}] Only edit these files: {', '.join(files_in_step)}"
+                step_objective += f"\n\n[STEP {si}/{len(steps)}] Primary edit targets: {', '.join(files_in_step)}"
             else:
                 step_objective += f"\n\n[STEP {si}/{len(steps)}]"
 
             step_plan = dict(plan)
-            if files_in_step:
-                step_plan["files_to_change"] = [{"file_path": p} for p in files_in_step]
+
+            # Allow edits to: global plan files ∪ current step primary targets ∪ (scope-expanded files)
+            allowed_union = list(dict.fromkeys((files_in_step or []) + scope_expanded_files))
+            if allowed_union:
+                step_plan["files_to_change"] = [{"file_path": p} for p in allowed_union]
+
 
             for it in range(1, self.cfg.max_iters + 1):
                 # Reset to start of this step (NOT to baseline) so we can accumulate progress.
@@ -1101,6 +1238,7 @@ class RefactoringAgent:
                         plan=step_plan,
                         context_pack=context_pack,
                         extra_tool_info=tool_info,
+                        only_files=allowed_union,
                     )
                 else:
                     patch = self._repair(
@@ -1110,6 +1248,7 @@ class RefactoringAgent:
                         prev_patch=step_prev_patch,
                         verify_logs=step_last_logs,
                         extra_tool_info=tool_info,
+                        only_files=allowed_union,
                     )
 
                 llm_out_file = artifacts / f"llm_output_step{si}_attempt{it}.txt"
@@ -1119,21 +1258,84 @@ class RefactoringAgent:
                 ok_apply, apply_logs = self._apply_llm_output(patch, diff_file)
                 (artifacts / f"apply_step{si}_attempt{it}.txt").write_text(apply_logs, encoding="utf-8")
                 if not ok_apply:
+                    # If apply failed because SEARCH block didn't match, it often means the model
+                    # did not have the authoritative file contents (e.g., missed Javadoc/comments).
+                    # Extract the file path(s) and include them in the next prompt + allowlist.
+                    missing = self._extract_apply_search_mismatch_files(apply_logs)
+                    expanded: List[str] = []
+                    for p in missing:
+                        if self._is_safe_repo_path(p) and (self.work_dir / p).exists():
+                            expanded.append(p)
+
+                    if expanded:
+                        scope_expanded_files = list(dict.fromkeys(scope_expanded_files + expanded))
+                        allowed_union = list(dict.fromkeys((files_in_step or []) + scope_expanded_files))
+                        step_plan["files_to_change"] = [{"file_path": p} for p in allowed_union]
+
                     step_last_logs = apply_logs
                     step_prev_patch = patch
                     continue
 
-                ok_scope, scope_logs = self._enforce_changed_files_whitelist(allowed_files)
+                ok_scope, scope_logs = self._enforce_changed_files_whitelist(
+    self._compute_allowed_files(step_plan, context_pack)
+)
+
                 if not ok_scope:
                     (artifacts / f"scope_step{si}_attempt{it}.txt").write_text(scope_logs, encoding="utf-8")
-                    step_last_logs = scope_logs
-                    step_prev_patch = patch
-                    continue
+
+                    # 解析 out-of-scope
+                    m = re.search(r"Out-of-scope:\s*\[(.*?)\]", scope_logs, flags=re.DOTALL)
+                    oos_paths = re.findall(r"'([^']+)'", m.group(0)) if m else []
+
+                    found_set = set((context_pack or {}).get("found_files") or [])
+                    candidates = []
+                    for p in oos_paths:
+                        p = (p or "").strip()
+                        if not p:
+                            continue
+                        # ✅ 建议用 work_dir 判断是否存在（而不是 project_dir）
+                        if (p in found_set) or (self._is_safe_repo_path(p) and (self.work_dir / p).exists()):
+                            candidates.append(p)
+
+                    candidates = list(dict.fromkeys(candidates))
+                    if candidates:
+                        scope_expanded_files = list(dict.fromkeys(scope_expanded_files + candidates))
+                        allowed_union = list(dict.fromkeys((files_in_step or []) + scope_expanded_files))
+                        step_plan["files_to_change"] = [{"file_path": p} for p in allowed_union]
+
+                        # ✅ 关键：扩容后立刻复查 scope（不要直接 continue）
+                        ok2, scope_logs2 = self._enforce_changed_files_whitelist(
+                            self._compute_allowed_files(step_plan, context_pack)
+                        )
+                        if ok2:
+                            (artifacts / f"scope_step{si}_attempt{it}_expanded.txt").write_text(
+                                scope_logs + "\n\n[ALLOWLIST EXPANDED]\n" + scope_logs2,
+                                encoding="utf-8",
+                            )
+                            # ✅ 继续往下走 verify/commit
+                        else:
+                            step_last_logs = scope_logs2
+                            step_prev_patch = patch
+                            continue
+                    else:
+                        step_last_logs = scope_logs
+                        step_prev_patch = patch
+                        continue
+
 
                 if self.cfg.verify_each_step:
                     verify_ok, verify_logs = self._verify(step_plan)
                     (artifacts / f"verify_step{si}_attempt{it}.txt").write_text(verify_logs, encoding="utf-8")
                     if not verify_ok:
+                        # Error-driven scope expansion: when compilation/test fails due to missing symbols,
+                        # automatically include the referenced files in the next iteration's edit scope and
+                        # dump their full contents to the model (to avoid API skew across files).
+                        extra_files = [p for p in self._extract_compiler_error_files(verify_logs) if self._is_safe_repo_path(p) and (self.work_dir / p).exists()]
+                        if extra_files:
+                            cur_files = [str(x.get("file_path") or "").strip() for x in (step_plan.get("files_to_change") or []) if str(x.get("file_path") or "").strip()]
+                            merged = cur_files + [p for p in extra_files if p not in cur_files]
+                            step_plan["files_to_change"] = [{"file_path": p} for p in merged]
+                            step_objective += "\n\n[ERROR-DRIVEN SCOPE EXPANSION] Verification failed. You may (and likely must) also edit: " + ", ".join(extra_files)
                         step_last_logs = verify_logs
                         step_prev_patch = patch
                         continue
@@ -1196,3 +1398,4 @@ def _format_cmd_result(res: CommandResult) -> str:
         f"[STDOUT]\n{res.stdout}\n"
         f"[STDERR]\n{res.stderr}\n"
     )
+

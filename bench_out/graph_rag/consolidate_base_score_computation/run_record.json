@@ -2,19 +2,8 @@
   "status": "failed",
   "attempts": 3,
   "objective": "需求：消除 baseScore 在引擎层与策略层的重复计算，保证一次决策只计算一次并复用同一口径。\n验收：输出不变；代码中不再出现同一决策链路的重复算分调用（可通过缓存到上下文/决策对象）。\n约束：复用方式应对未来扩展（如 Region 上下文）友好，避免再次散落计算逻辑。",
-  "modified_files": [
-    "src/main/java/com/icbc/marketing/core/DecisionContext.java",
-    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
-    "target/classes/com/icbc/marketing/DemoRunner.class",
-    "target/classes/com/icbc/marketing/core/DecisionContext.class",
-    "target/classes/com/icbc/marketing/core/LegacyScoringUtil.class",
-    "target/classes/com/icbc/marketing/service/CampaignDecisionEngine$DecisionContext.class",
-    "target/classes/com/icbc/marketing/service/CampaignDecisionEngine.class",
-    "target/classes/com/icbc/marketing/strategy/AbstractBaseStrategy.class",
-    "target/classes/com/icbc/marketing/strategy/IPromotionStrategy.class",
-    "target/classes/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.class"
-  ],
-  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_155121",
+  "modified_files": [],
+  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_071537",
   "allowed_commands": null,
   "context_coverage": {
     "expected_files": [
@@ -66,18 +55,18 @@
     }
   },
   "post_project_maintainability": {
-    "methods": 20,
-    "avg_loc": 7.2,
-    "avg_cyclomatic": 1.45,
-    "p95_loc": 34.05,
-    "p95_cyclomatic": 3.1000000000000014,
+    "methods": 13,
+    "avg_loc": 9.0,
+    "avg_cyclomatic": 1.5384615384615385,
+    "p95_loc": 34.4,
+    "p95_cyclomatic": 3.799999999999997,
     "max_loc": 35,
     "max_cyclomatic": 5,
     "duplication": {
-      "total_lines": 238,
-      "duplicate_lines": 109,
-      "duplicate_line_ratio": 0.4579831932773109,
-      "distinct_lines": 151
+      "total_lines": 157,
+      "duplicate_lines": 50,
+      "duplicate_line_ratio": 0.3184713375796178,
+      "distinct_lines": 114
     }
   },
   "pre_change_risk": {
@@ -110,8 +99,19 @@
     "src/main/java/com/icbc/marketing/strategy/impl/HighNetWorthStrategy.java"
   ],
   "post_impacted_files": [],
+  "accept_mode": "strict",
   "accept_ok": false,
   "accept_reasons": [
+    "post_focus_method_missing",
+    "missing_expected_files: src/main/java/com/icbc/marketing/core/ScoringService.java"
+  ],
+  "accept_strict_ok": false,
+  "accept_strict_reasons": [
+    "post_focus_method_missing",
+    "missing_expected_files: src/main/java/com/icbc/marketing/core/ScoringService.java"
+  ],
+  "accept_semantic_ok": false,
+  "accept_semantic_reasons": [
     "post_focus_method_missing",
     "missing_expected_files: src/main/java/com/icbc/marketing/core/ScoringService.java"
   ]

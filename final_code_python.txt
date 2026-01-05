@@ -1,102 +1,4 @@
 
-==================== FILE: demo_benchmark copy.py ====================
-#!/usr/bin/env python3
-"""Run a small, reproducible refactoring benchmark on a Java project.
-
-This script is designed to support a "research-flavored" demo:
-  - 1-2 small refactoring tasks
-  - measurable outcomes (correctness, maintainability, change-risk)
-  - ablation / comparison (Graph-RAG vs vector-only retrieval)
-
-Usage (example):
-  python demo_benchmark.py \
-    --project data/marketing-demo \
-    --tasks data/bench_tasks.json \
-    --out bench_out \
-    --modes graph_rag,vector_only
-
-Notes:
-  - By default, the agent uses an OpenAI-compatible endpoint.
-    Set OPENAI_API_KEY (and optionally OPENAI_MODEL, OPENAI_BASE_URL).
-  - If you pass --dry-llm, the benchmark will still run but refactoring will
-    likely fail verification (useful to validate the plumbing).
-"""
-
-from __future__ import annotations
-
-import argparse
-from pathlib import Path
-
-from src.dotenv import auto_load_dotenv
-from src.eval.benchmark import load_tasks, run_benchmark
-from src.eval.report import write_benchmark_report
-
-
-def main() -> None:
-    ap = argparse.ArgumentParser()
-    ap.add_argument(
-        "--dotenv",
-        default=None,
-        help=(
-            "Optional path to a .env file. If omitted, the runner will still try to "
-            "auto-load .env from the current directory or parent directories."
-        ),
-    )
-    ap.add_argument("--project", required=True, help="Java project root directory")
-    ap.add_argument("--tasks", required=True, help="Path to tasks JSON (see data/bench_tasks.json)")
-    ap.add_argument("--out", default="bench_out", help="Output directory")
-    ap.add_argument("--modes", default="graph_rag,vector_only", help="Comma-separated: graph_rag,vector_only")
-    ap.add_argument("--seed-top-k", type=int, default=5)
-    ap.add_argument("--hops", type=int, default=2)
-    ap.add_argument("--max-nodes", type=int, default=30)
-    ap.add_argument("--max-iters", type=int, default=3)
-    ap.add_argument("--dry-llm", action="store_true")
-    ap.add_argument(
-        "--force-regex-parser",
-        action="store_true",
-        help="Force the regex fallback parser (useful if you don't want tree-sitter).",
-    )
-    args = ap.parse_args()
-
-    # Load .env (optional explicit path, otherwise auto-search).
-    auto_load_dotenv(args.dotenv)
-
-    project_root = Path(args.project)
-    tasks_path = Path(args.tasks)
-    out_dir = Path(args.out)
-
-    tasks = load_tasks(tasks_path)
-    modes = [m.strip() for m in str(args.modes).split(",") if m.strip()]
-
-    _ = run_benchmark(
-        project_root=project_root,
-        tasks=tasks,
-        out_dir=out_dir,
-        modes=modes,
-        prefer_tree_sitter=not bool(args.force_regex_parser),
-        seed_top_k=args.seed_top_k,
-        hops=args.hops,
-        max_nodes=args.max_nodes,
-        max_iters=args.max_iters,
-        dry_llm=args.dry_llm,
-    )
-
-    results_path = out_dir / "benchmark_results.json"
-    html_path = out_dir / "benchmark_report.html"
-    write_benchmark_report(results_path, out_html=html_path)
-
-    print(f"✅ Results JSON: {results_path.resolve()}")
-    print(f"✅ Report HTML:  {html_path.resolve()}")
-    print(f"Modes: {', '.join(modes)}")
-    print(f"Tasks: {', '.join(t.name for t in tasks)}")
-
-
-if __name__ == "__main__":
-    main()
-
-==================== END FILE ====================
-
-
 ==================== FILE: merge.py ====================
 import os
 
@@ -166,6 +68,7 @@ def merge_project_code(root_dir, output_file):
 
 if __name__ == "__main__":
     merge_project_code(os.getcwd(), "final_code.txt")
+
 ==================== END FILE ====================
 
 
@@ -226,6 +129,7 @@ def main() -> None:
     ap.add_argument("--max-nodes", type=int, default=30)
     ap.add_argument("--max-iters", type=int, default=3)
     ap.add_argument("--dry-llm", action="store_true")
+    ap.add_argument("--accept-mode", default="strict", choices=["strict", "semantic"], help="Acceptance check mode: strict (exact file paths/method ids) or semantic (allow reasonable variations).")
     ap.add_argument(
         "--force-regex-parser",
         action="store_true",
@@ -266,6 +170,141 @@ def main() -> None:
     print(f"Modes: {', '.join(modes)}")
     print(f"Tasks: {', '.join(t.name for t in tasks)}")
 
+
+if __name__ == "__main__":
+    main()
+
+
+==================== END FILE ====================
+
+
+==================== FILE: merge_refactor_logs_copy.py ====================
+import os
+import json
+from pathlib import Path
+
+# ================= 配置区域 =================
+# 你的 bench_out 输出目录名称
+BENCH_OUT_DIR = "bench_out"
+# 最终生成的合并文件名称
+OUTPUT_FILE = "merged_refactor_debug_log.txt"
+# ===========================================
+
+def read_file_content(file_path):
+    """读取文件内容，处理编码问题"""
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read()
+    except UnicodeDecodeError:
+        try:
+            with open(file_path, 'r', encoding='latin-1') as f:
+                return f.read()
+        except Exception:
+            return "[Binary or Unreadable File]"
+    except FileNotFoundError:
+        return "[File Not Found]"
+
+def write_separator(f, title, char="="):
+    """写入清晰的分隔符"""
+    f.write(f"\n{char*50}\n")
+    f.write(f" {title}\n")
+    f.write(f"{char*50}\n\n")
+
+def main():
+    root_path = Path(os.getcwd())
+    bench_path = root_path / BENCH_OUT_DIR
+    
+    if not bench_path.exists():
+        print(f"❌ 错误: 找不到目录 {bench_path}")
+        return
+
+    print(f"📂 开始扫描 {bench_path}...")
+    
+    with open(OUTPUT_FILE, 'w', encoding='utf-8') as outfile:
+        outfile.write(f"Refactoring Agent Debug Log\nGenerated Time: {os.times()}\n\n")
+
+        # 遍历 bench_out 下的所有模式 (例如 graph_rag, vector_only)
+        for mode_dir in bench_path.iterdir():
+            if not mode_dir.is_dir() or mode_dir.name.startswith("."):
+                continue
+            
+            # 遍历模式下的具体任务 (例如 consolidate_base_score_computation)
+            for task_dir in mode_dir.iterdir():
+                if not task_dir.is_dir() or task_dir.name.startswith("."):
+                    continue
+
+                task_name = task_dir.name
+                mode_name = mode_dir.name
+                
+                print(f"  Processing Task: [{mode_name}] {task_name}")
+                
+                write_separator(outfile, f"TASK: {task_name} (Mode: {mode_name})", char="#")
+
+                # 1. 读取 Bench Out 目录下的概览文件
+                bench_files = ["agent_summary.json", "run_record.json", "context_coverage.json"]
+                artifacts_path = None
+                
+                for filename in bench_files:
+                    file_path = task_dir / filename
+                    if file_path.exists():
+                        content = read_file_content(file_path)
+                        outfile.write(f"--- [Bench File] {filename} ---\n")
+                        outfile.write(content + "\n\n")
+                        
+                        # 如果是 summary，尝试提取 artifacts 路径
+                        if filename == "agent_summary.json":
+                            try:
+                                data = json.loads(content)
+                                if "artifacts_dir" in data:
+                                    raw_path = data["artifacts_dir"]
+                                    # 处理绝对路径，如果在这台机器上跑，绝对路径通常是有效的
+                                    # 如果绝对路径无效，尝试将其视为相对路径或寻找项目内的对应路径
+                                    artifacts_path = Path(raw_path)
+                                    if not artifacts_path.exists():
+                                        # 尝试一种回退机制：假设 artifacts 在项目根目录的 .refactor_agent_runs 下
+                                        # 提取路径中 .refactor_agent_runs 之后的部分
+                                        parts = raw_path.split(".refactor_agent_runs")
+                                        if len(parts) > 1:
+                                            artifacts_path = root_path / ".refactor_agent_runs" / parts[1].strip(os.sep)
+                            except Exception as e:
+                                print(f"    ⚠️ 解析 artifacts_dir 失败: {e}")
+
+                # 2. 读取 Artifacts 目录下的详细过程文件
+                if artifacts_path and artifacts_path.exists():
+                    outfile.write(f"--- [Artifacts Dir] {artifacts_path} ---\n\n")
+                    
+                    # 获取该目录下所有文件并排序
+                    # 排序很重要，为了让 step1, step2 按顺序显示
+                    artifact_files = sorted([f for f in artifacts_path.iterdir() if f.is_file()])
+                    
+                    # 定义我们关心的文件优先级，确保重要的先展示
+                    # 比如 plan.json 最先，summary.json 最后，中间是步骤
+                    def sort_key(f):
+                        name = f.name
+                        if "plan.json" in name: return 0
+                        if "tool_outputs" in name: return 1
+                        if "step" in name: return 2
+                        if "summary.json" in name: return 99
+                        return 10
+                    
+                    artifact_files.sort(key=sort_key)
+
+                    for art_file in artifact_files:
+                        # 跳过一些不需要的二进制文件或过大的文件
+                        if art_file.suffix not in ['.json', '.txt', '.diff', '.log', '.md', '.py', '.java']:
+                            continue
+                        
+                        # 读取内容
+                        content = read_file_content(art_file)
+                        
+                        outfile.write(f"📄 FILE: {art_file.name}\n")
+                        outfile.write("-" * 20 + "\n")
+                        outfile.write(content)
+                        outfile.write("\n" + "-" * 20 + "\n\n")
+                else:
+                    outfile.write(f"⚠️ Warning: Artifacts directory not found or inaccessible: {artifacts_path}\n")
+
+    print(f"\n✅ 合并完成！文件已保存至: {Path(OUTPUT_FILE).absolute()}")
 
 if __name__ == "__main__":
     main()
@@ -489,6 +528,7 @@ def main():
 if __name__ == "__main__":
     main()
 
+
 ==================== END FILE ====================
 
 
@@ -540,7 +580,7 @@ def main() -> None:
     graph = builder.get_graph()
 
     print("🧠 Building vector index (TF-IDF)...")
-    vindex = NodeVectorIndex()
+    vindex = NodeVectorIndex(project_root=str(project_root))
     vindex.build_from_graph(graph)
 
     engine = GraphRAGContextEngine(graph, vindex)
@@ -580,6 +620,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
 ==================== END FILE ====================
 
@@ -793,6 +834,7 @@ def main():
 if __name__ == "__main__":
     main()
 
+
 ==================== END FILE ====================
 
 
@@ -804,6 +846,12 @@ from pathlib import Path
 # ================= 配置区域 =================
 # 你的 bench_out 输出目录名称
 BENCH_OUT_DIR = "bench_out"
+
+# 🔴 关键修改：在这里指定你想合并的任务名称
+# 如果想合并所有任务，请留空： TARGET_TASK_NAME = "" 或 TARGET_TASK_NAME = None
+# 如果只想合并特定任务，填入名称： TARGET_TASK_NAME = "remove_magic_numbers"
+TARGET_TASK_NAME = "remove_magic_numbers"
+
 # 最终生成的合并文件名称
 OUTPUT_FILE = "merged_refactor_debug_log.txt"
 # ===========================================
@@ -837,9 +885,19 @@ def main():
         return
 
     print(f"📂 开始扫描 {bench_path}...")
+    if TARGET_TASK_NAME:
+        print(f"🎯 过滤模式开启：只合并包含 '{TARGET_TASK_NAME}' 的任务")
+    else:
+        print(f"🔄 全量模式开启：合并所有任务")
     
+    found_count = 0
+
     with open(OUTPUT_FILE, 'w', encoding='utf-8') as outfile:
-        outfile.write(f"Refactoring Agent Debug Log\nGenerated Time: {os.times()}\n\n")
+        outfile.write(f"Refactoring Agent Debug Log\nGenerated Time: {os.times()}\n")
+        if TARGET_TASK_NAME:
+            outfile.write(f"Filter: Only showing tasks matching '{TARGET_TASK_NAME}'\n\n")
+        else:
+            outfile.write("Filter: All Tasks\n\n")
 
         # 遍历 bench_out 下的所有模式 (例如 graph_rag, vector_only)
         for mode_dir in bench_path.iterdir():
@@ -854,7 +912,13 @@ def main():
                 task_name = task_dir.name
                 mode_name = mode_dir.name
                 
-                print(f"  Processing Task: [{mode_name}] {task_name}")
+                # --- 🔍 过滤逻辑在这里 ---
+                if TARGET_TASK_NAME and (TARGET_TASK_NAME not in task_name):
+                    continue
+                # -----------------------
+
+                found_count += 1
+                print(f"  ✅ Found Task: [{mode_name}] {task_name}")
                 
                 write_separator(outfile, f"TASK: {task_name} (Mode: {mode_name})", char="#")
 
@@ -875,12 +939,9 @@ def main():
                                 data = json.loads(content)
                                 if "artifacts_dir" in data:
                                     raw_path = data["artifacts_dir"]
-                                    # 处理绝对路径，如果在这台机器上跑，绝对路径通常是有效的
-                                    # 如果绝对路径无效，尝试将其视为相对路径或寻找项目内的对应路径
                                     artifacts_path = Path(raw_path)
+                                    # 回退机制：如果绝对路径找不到，尝试在当前项目下找
                                     if not artifacts_path.exists():
-                                        # 尝试一种回退机制：假设 artifacts 在项目根目录的 .refactor_agent_runs 下
-                                        # 提取路径中 .refactor_agent_runs 之后的部分
                                         parts = raw_path.split(".refactor_agent_runs")
                                         if len(parts) > 1:
                                             artifacts_path = root_path / ".refactor_agent_runs" / parts[1].strip(os.sep)
@@ -891,12 +952,9 @@ def main():
                 if artifacts_path and artifacts_path.exists():
                     outfile.write(f"--- [Artifacts Dir] {artifacts_path} ---\n\n")
                     
-                    # 获取该目录下所有文件并排序
-                    # 排序很重要，为了让 step1, step2 按顺序显示
                     artifact_files = sorted([f for f in artifacts_path.iterdir() if f.is_file()])
                     
-                    # 定义我们关心的文件优先级，确保重要的先展示
-                    # 比如 plan.json 最先，summary.json 最后，中间是步骤
+                    # 排序优先级
                     def sort_key(f):
                         name = f.name
                         if "plan.json" in name: return 0
@@ -908,13 +966,10 @@ def main():
                     artifact_files.sort(key=sort_key)
 
                     for art_file in artifact_files:
-                        # 跳过一些不需要的二进制文件或过大的文件
                         if art_file.suffix not in ['.json', '.txt', '.diff', '.log', '.md', '.py', '.java']:
                             continue
                         
-                        # 读取内容
                         content = read_file_content(art_file)
-                        
                         outfile.write(f"📄 FILE: {art_file.name}\n")
                         outfile.write("-" * 20 + "\n")
                         outfile.write(content)
@@ -922,7 +977,10 @@ def main():
                 else:
                     outfile.write(f"⚠️ Warning: Artifacts directory not found or inaccessible: {artifacts_path}\n")
 
-    print(f"\n✅ 合并完成！文件已保存至: {Path(OUTPUT_FILE).absolute()}")
+    if found_count == 0:
+        print(f"\n⚠️ 未找到任何包含 '{TARGET_TASK_NAME}' 的任务。请检查名称拼写。")
+    else:
+        print(f"\n✅ 合并完成！共处理 {found_count} 个任务。文件已保存至: {Path(OUTPUT_FILE).absolute()}")
 
 if __name__ == "__main__":
     main()
@@ -1222,13 +1280,19 @@ class ScoredNode:
 
 
 class NodeVectorIndex:
-    def __init__(self) -> None:
+    def __init__(self, project_root: Optional[str] = None, snippet_max_chars: int = 800) -> None:
+        # project_root is optional; when provided we can add small code excerpts to the index text
+        # to improve retrieval for "semantic" queries that don't mention exact symbol names.
+        from pathlib import Path
+
+        self.project_root = Path(project_root) if project_root else None
+        self.snippet_max_chars = int(snippet_max_chars)
+
         self.vectorizer: Optional[TfidfVectorizer] = None
         self.node_ids: List[str] = []
         self.matrix = None  # scipy sparse matrix
 
-    @staticmethod
-    def _node_to_text(node_id: str, attrs: Dict) -> str:
+    def _node_to_text(self, node_id: str, attrs: Dict) -> str:
         parts: List[str] = []
         ntype = attrs.get("type", "Unknown")
         parts.append(f"{ntype} {node_id}")
@@ -1243,7 +1307,24 @@ class NodeVectorIndex:
             parts.append(f"class {attrs['class']}")
         if attrs.get("file_path"):
             parts.append(f"file {attrs['file_path']}")
+
+            # Add a small excerpt of source text to boost retrieval when names are not sufficient.
+            if self.project_root and attrs.get("start_line") and attrs.get("end_line"):
+                try:
+                    fp = self.project_root / str(attrs["file_path"])
+                    if fp.exists():
+                        lines = fp.read_text(encoding="utf-8", errors="ignore").splitlines()
+                        s = max(0, int(attrs["start_line"]) - 1)
+                        e = min(len(lines), int(attrs["end_line"]))
+                        excerpt = "\n".join(lines[s:e])
+                        if len(excerpt) > self.snippet_max_chars:
+                            excerpt = excerpt[: self.snippet_max_chars] + " <SNIPPET_TRUNCATED>"
+                        parts.append(excerpt)
+                except Exception:
+                    pass
+
         return normalize_code_text(" ".join(parts))
+
 
     def build_from_graph(self, graph) -> None:
         texts: List[str] = []
@@ -1282,6 +1363,7 @@ class NodeVectorIndex:
             if len(out) >= top_k:
                 break
         return out
+
 
 ==================== END FILE ====================
 
@@ -1347,219 +1429,13 @@ class GraphRetriever:
             self._engine = GraphRAGContextEngine(self.graph, self.vector_index)
         return self._engine.query(query, **kwargs)
 
+
 ==================== END FILE ====================
 
 
 ==================== FILE: src/__init__.py ====================
 # Graph-RAG Context Engine demo package
 
-==================== END FILE ====================
-
-
-==================== FILE: src/prompts.py ====================
-from __future__ import annotations
-
-import json
-from typing import Any, Dict, List
-
-
-def _trim(s: str, max_chars: int) -> str:
-    if s is None:
-        return ""
-    s = str(s)
-    return s if len(s) <= max_chars else (s[: max_chars - 3] + "...")
-
-
-def context_pack_to_prompt(pack: Dict[str, Any], *, max_nodes: int = 18, max_snippet_chars: int = 2200) -> str:
-    """
-    Convert context_pack.json into a compact, LLM-friendly text block.
-    """
-    query = pack.get("query", "")
-    focus = (pack.get("focus") or {}).get("node_id") or pack.get("focus_node") or ""
-    seed_nodes = pack.get("seed_nodes", [])
-
-    nodes = pack.get("nodes", [])
-    def node_key(n):
-        role = n.get("role", "")
-        order = {"focus": 0, "seed": 1, "caller": 2, "callee": 3}.get(role, 9)
-        return (order, n.get("type",""), n.get("node_id",""))
-
-    nodes_sorted = sorted(nodes, key=node_key)[:max_nodes]
-
-    out: List[str] = []
-    out.append(f"Retrieval query: {query}")
-    out.append(f"Focus node: {focus}")
-    if seed_nodes:
-        out.append("Seed nodes (vector search):")
-        for s in seed_nodes[:8]:
-            out.append(f"  - {s.get('node_id')} (score={s.get('score')})")
-    out.append("")
-    out.append("=== Context Nodes (with code excerpts) ===")
-    for n in nodes_sorted:
-        nid = n.get("node_id")
-        typ = n.get("type")
-        fp = n.get("file_path")
-        sl = n.get("start_line")
-        el = n.get("end_line")
-        sig = _trim(n.get("signature",""), 240)
-        roles = n.get("roles", [])
-        why = n.get("why", [])
-        snippet = _trim(n.get("snippet",""), max_snippet_chars)
-        out.append(f"\n[{typ}] {nid}")
-        if fp:
-            out.append(f"Location: {fp}:{sl}-{el}")
-        if sig:
-            out.append(f"Signature: {sig}")
-        if roles:
-            out.append(f"Roles: {', '.join(map(str, roles))}")
-        if why:
-            why_short = [str(x) for x in why][:5]
-            out.append("Why selected:")
-            for w in why_short:
-                out.append(f"  - {w}")
-        if snippet:
-            out.append("Code:")
-            out.append(snippet)
-    out.append("\n=== End Context ===")
-    return "\n".join(out)
-
-
-PLAN_SYSTEM = """You are a senior software engineer designing a safe automated refactoring plan.
-You must be concise, risk-aware, and verification-driven.
-Return STRICT JSON only (no markdown, no commentary outside JSON)."""
-
-PLAN_USER_TEMPLATE = """Given the user request and the provided context pack, propose a refactoring plan.
-
-Requirements:
-- The goal is behavior-preserving refactoring.
-- Only modify files that are necessary.
-- Include a verification plan (commands) that can run in a sandbox (no shell operators like &&, |, >).
-- Include risk notes.
-- Optional: request additional information using tool_requests.
-- IMPORTANT: All paths must be repo-root-relative, like "src/main/java/...". Do NOT prefix with "data/marketing-demo/".
-
-Return JSON with this schema:
-{{
-  "objective": "...",
-  "assumptions": ["..."],
-  "steps": ["..."],
-  "files_to_change": [{{"file_path":"...", "why":"...", "risk":"low|medium|high"}}],
-  "verification": [{{"name":"...", "cmd":"..."}}],
-  "tool_requests": [{{"tool":"ripgrep", "pattern":"...", "path":"..."}}]
-}}
-
-User request:
-{request}
-
-Context pack:
-{context}
-"""
-
-
-EDIT_SYSTEM = """You are a senior software engineer.
-You MUST output ONLY edit instructions using either Search/Replace blocks (preferred) or Full Rewrite blocks.
-No markdown. No explanation. No code fences.
-
-FORMAT (Search/Replace blocks - preferred):
-FILE: <repo-relative-path>
-<<<<<<< SEARCH
-<exact text copied from the current file>
-=======
-<replacement text>
->>>>>>> REPLACE
-
-You may include multiple SEARCH/REPLACE blocks under the same FILE.
-
-FORMAT (Full Rewrite - allowed for small files):
-FILE: <repo-relative-path>
-<<<<<<< REWRITE
-<entire new file content>
->>>>>>> REWRITE
-
-RULES:
-- Do NOT use "..." anywhere. Do NOT omit code.
-- Do NOT abbreviate file paths.
-- For Search/Replace: the SEARCH text MUST match EXACTLY ONE occurrence in the current file.
-- Keep changes minimal and behavior-preserving.
-"""
-
-
-EDIT_USER_TEMPLATE = """Task: {objective}
-
-Refactoring plan (JSON):
-{plan_json}
-
-Context pack with code excerpts:
-{context}
-
-IMPORTANT:
-- Use file paths relative to the repo root (e.g., "src/main/java/..."). Do NOT prefix with "data/marketing-demo/".
-- Output MUST be ONLY edit instructions (no commentary).
-- Prefer Search/Replace blocks (stable). Use Full Rewrite only when necessary.
-- Do NOT use "..." anywhere; do NOT shorten paths or code.
-
-If the prompt includes a section named "EXACT REPO FILE CONTENTS (authoritative)", you MUST use that as the source of truth.
-
-Return an UPDATED FULL set of edit instructions that should pass verification.
-Return ONLY the edit instructions.
-"""
-
-
-REPAIR_SYSTEM = """You are a senior software engineer.
-You MUST output ONLY edit instructions using either Search/Replace blocks (preferred) or Full Rewrite blocks.
-No markdown. No explanation. No code fences.
-
-You are given previous edit instructions and failure logs. Produce an UPDATED FULL set of instructions
-(relative to the ORIGINAL codebase) that fixes the failures while keeping changes minimal and behavior-preserving.
-
-FORMAT (Search/Replace blocks - preferred):
-FILE: <repo-relative-path>
-<<<<<<< SEARCH
-<exact text copied from the current file>
-=======
-<replacement text>
->>>>>>> REPLACE
-
-FORMAT (Full Rewrite - allowed for small files):
-FILE: <repo-relative-path>
-<<<<<<< REWRITE
-<entire new file content>
->>>>>>> REWRITE
-
-RULES:
-- Do NOT use "..." anywhere. Do NOT omit code.
-- Do NOT abbreviate file paths.
-- For Search/Replace: the SEARCH text MUST match EXACTLY ONE occurrence in the current file.
-- Keep changes minimal and behavior-preserving.
-"""
-
-
-REPAIR_USER_TEMPLATE = """Task: {objective}
-
-Refactoring plan (JSON):
-{plan_json}
-
-Previous edit instructions (that failed to apply or failed verification):
-{prev_patch}
-
-Failure / verification outputs:
-{verify_logs}
-
-Context pack with code excerpts:
-{context}
-
-IMPORTANT:
-- Use file paths relative to the repo root (e.g., "src/main/java/..."). Do NOT prefix with "data/marketing-demo/".
-- Output MUST be ONLY edit instructions (no commentary).
-- Prefer Search/Replace blocks (stable). Use Full Rewrite only when necessary.
-- Do NOT use "..." anywhere; do NOT shorten paths or code.
-- If apply failed because SEARCH did not match, adjust the SEARCH blocks to match the exact current file text (include more surrounding context).
-
-If the prompt includes a section named "EXACT REPO FILE CONTENTS (authoritative)", you MUST use that as the source of truth.
-
-Return an UPDATED FULL set of edit instructions that should pass verification.
-Return ONLY the edit instructions.
-"""
 
 ==================== END FILE ====================
 
@@ -2629,11 +2505,11 @@ class JavaCodeParser:
 
         return relationships
 
+
 ==================== END FILE ====================
 
 
 ==================== FILE: src/dotenv.py ====================
-
 from __future__ import annotations
 
 import os
@@ -2709,6 +2585,7 @@ def auto_load_dotenv(explicit_path: Optional[str] = None) -> Optional[str]:
             # Never hard-fail on dotenv parsing
             continue
     return None
+
 
 ==================== END FILE ====================
 
@@ -2853,10 +2730,1504 @@ def load_snippet(path: str, start_line: int, end_line: int, max_lines: int = 120
 
     return "".join(snippet_lines)
 
+
 ==================== END FILE ====================
 
 
-==================== FILE: src/agent.py ====================
+==================== FILE: src/context_engine.py ====================
+"""
+Graph-RAG Context Engine
+
+Goal:
+- Given a natural language query, first do vector search over graph nodes to find seed(s).
+- Then expand the graph neighborhood (k-hop + rule-based expansion).
+- Finally output a structured "Context Pack" (like IDE refactoring preview).
+
+This is the *bridge* between your graph builder and the future refactoring agent.
+"""
+from __future__ import annotations
+
+from collections import defaultdict, deque
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Set, Tuple
+
+import networkx as nx
+
+from .utils import load_snippet
+from .vector_index import NodeVectorIndex, ScoredNode
+
+
+@dataclass
+class ContextNode:
+    node_id: str
+    name: str
+    type: str
+    file_path: str
+    start_line: int
+    end_line: int
+    signature: str
+    docstring: str
+    snippet: str
+    role: str
+    roles: List[str]
+    highlight_span: Optional[Dict[str, int]]
+    why: List[str]
+
+
+class GraphRAGContextEngine:
+    def __init__(
+        self,
+        graph: nx.DiGraph,
+        vector_index: NodeVectorIndex,
+        *,
+        max_snippet_lines: int = 120,
+    ) -> None:
+        self.graph = graph
+        self.vindex = vector_index
+        self.max_snippet_lines = max_snippet_lines
+
+        # Precompute helper indexes for rule-based expansion
+        self.class_to_members: Dict[str, Set[str]] = defaultdict(set)
+        self.file_to_nodes: Dict[str, Set[str]] = defaultdict(set)
+        self.field_to_methods: Dict[str, Set[str]] = defaultdict(set)
+
+        self._build_aux_indexes()
+
+    def _build_aux_indexes(self) -> None:
+        # class_to_members + file_to_nodes
+        for nid, attrs in self.graph.nodes(data=True):
+            cls = attrs.get("class") or (nid if attrs.get("type") == "Class" else None)
+            if cls:
+                self.class_to_members[str(cls)].add(nid)
+            fp = attrs.get("file_path")
+            if fp:
+                self.file_to_nodes[str(fp)].add(nid)
+
+        # field_to_methods via READS/WRITES edges
+        for u, v, attrs in self.graph.edges(data=True):
+            rel = attrs.get("relation") or attrs.get("type")
+            if rel in ("READS", "WRITES"):
+                # v should be a field node (or unresolved)
+                self.field_to_methods[str(v)].add(str(u))
+
+    # -------------------------
+    # Public API
+    # -------------------------
+    def query(
+        self,
+        query: str,
+        *,
+        seed_top_k: int = 5,
+        hops: int = 2,
+        max_nodes: int = 30,
+        same_class_limit: int = 8,
+        same_file_limit: int = 8,
+        shared_field_limit: int = 10,
+    ) -> Dict:
+        """
+        Return a structured context pack.
+
+        Parameters:
+        - query: natural language or a node_id (if exact match)
+        """
+        seeds = self._select_seeds(query, seed_top_k=seed_top_k)
+
+        selected: Set[str] = set()
+        reasons: Dict[str, List[str]] = defaultdict(list)
+        roles: Dict[str, Set[str]] = defaultdict(set)
+
+        def add(nid: str, why: str, role: Optional[str] = None) -> None:
+            if not nid:
+                return
+            if nid not in selected:
+                selected.add(nid)
+            if why and why not in reasons[nid]:
+                reasons[nid].append(why)
+            if role:
+                roles[nid].add(role)
+
+        # # If query is an exact node id, mark it as focus; otherwise take top seed.
+        # focus_node_id = query if query in self.graph else (seeds[0].node_id if seeds else "")
+
+        # # Always include focus (even when it is not selected by seeds for some reason).
+        # if focus_node_id:
+        #     add(focus_node_id, "focus node", role="focus")
+
+        # # 1) add seed nodes
+        # for s in seeds:
+        #     add(s.node_id, f"seed via vector search (score={s.score:.3f})", role="seed")
+
+        # # 2) call graph expansion: separate callees vs callers (IDE-like preview)
+        # callees = self._expand_relation_dir([focus_node_id], relation="CALLS", hops=hops, direction="out")
+        # callers = self._expand_relation_dir([focus_node_id], relation="CALLS", hops=hops, direction="in")
+        # src/context_engine.py — GraphRAGContextEngine.query
+
+        # focus_node_id = query if query in self.graph else (seeds[0].node_id if seeds else "")
+        # related_nodes = {focus_node_id} if focus_node_id else set()
+
+        # # --- NEW: Field -> Method bridge ---
+        # focus_is_field = False
+        # if focus_node_id:
+        #     node_type = (self.graph.nodes[focus_node_id].get("type") or "").lower()
+        #     focus_is_field = (node_type == "field") or (focus_node_id in self.field_to_methods)
+
+        # field_usage_methods = []
+        # if focus_is_field:
+        #     field_usage_methods = sorted(self.field_to_methods.get(focus_node_id, []))
+        #     # 把使用该 Field 的 Methods 先拉进 related_nodes（也可用你现有的 add() 给 role/why）
+        #     for mid in field_usage_methods:
+        #         if mid in self.graph:
+        #             related_nodes.add(mid)
+
+        # # 用 methods 作为 CALLS 扩展起点（否则从 Field 出发基本扩不出调用图）
+        # call_roots = field_usage_methods if (focus_is_field and field_usage_methods) else [focus_node_id]
+
+        # callees = self._expand_relation_dir(call_roots, relation="CALLS", direction="out", max_depth=hops, max_nodes=max_nodes)
+        # callers = self._expand_relation_dir(call_roots, relation="CALLS", direction="in",  max_depth=hops, max_nodes=max_nodes)
+
+        # If query is an exact node id, mark it as focus; otherwise take top seed.
+        raw_focus_id = query if query in self.graph else (seeds[0].node_id if seeds else "")
+        
+        # --- Field -> Method bridge ---
+        # If the focus is a Field (e.g., GOLDEN_RATIO), jump back to Methods that READ/WRITE it.
+        focus_node_id = raw_focus_id
+        focus_field_id: Optional[str] = None
+        field_usage_methods: List[str] = []
+        if focus_node_id:
+            node_type = (self.graph.nodes[focus_node_id].get("type") or "").lower()
+            focus_is_field = (node_type == "field") or (focus_node_id in self.field_to_methods)
+            if focus_is_field:
+                focus_field_id = focus_node_id
+                field_usage_methods = sorted([m for m in self.field_to_methods.get(focus_field_id, []) if m in self.graph])
+                # Prefer a Method node as the focus for downstream expansions.
+                method_candidates = [m for m in field_usage_methods if (self.graph.nodes[m].get("type") or "").lower() == "method"]
+                if method_candidates:
+                    focus_node_id = method_candidates[0]
+                elif field_usage_methods:
+                    focus_node_id = field_usage_methods[0]
+        
+        # Always include focus + seed nodes in the selection set.
+        if focus_node_id:
+            add(focus_node_id, "focus node (exact match or top seed)", role="focus")
+        for s in seeds:
+            add(s.node_id, f"seed via vector search (score={s.score:.3f})", role="seed")
+        if focus_field_id:
+            add(focus_field_id, "focus field (matched by query) – expanded to usage methods", role="seed")
+            for mid in field_usage_methods:
+                add(mid, f"uses field {focus_field_id}", role="field_user")
+        
+        # Call graph expansion (IDE-like preview): separate callees vs callers
+        call_roots = field_usage_methods if field_usage_methods else ([focus_node_id] if focus_node_id else [])
+        callees = self._expand_relation_dir(call_roots, relation="CALLS", hops=hops, direction="out")
+        callers = self._expand_relation_dir(call_roots, relation="CALLS", hops=hops, direction="in")
+
+
+        for nid, depth in callees.items():
+            add(nid, f"call-graph neighbor (CALLEE, depth={depth})", role="callee")
+        for nid, depth in callers.items():
+            add(nid, f"call-graph neighbor (CALLER, depth={depth})", role="caller")
+
+        # 3) same-class members (siblings of focus)
+        focus_cls = self.graph.nodes[focus_node_id].get("class") if focus_node_id in self.graph else None
+        if focus_cls:
+            members = list(self.class_to_members.get(str(focus_cls), set()))
+            members = [m for m in members if self.graph.nodes[m].get("type") != "Class"]
+            # Keep bounded
+            for m in members[:same_class_limit]:
+                add(m, f"same class member of {focus_cls}", role="same_class_member")
+
+        # 4) shared field access: focus method -> field -> other methods (READS/WRITES separated)
+        read_fields: Set[str] = set()
+        written_fields: Set[str] = set()
+        if focus_node_id:
+            for _, v, attrs in self.graph.out_edges(focus_node_id, data=True):
+                rel = attrs.get("relation") or attrs.get("type")
+                if rel == "READS":
+                    read_fields.add(str(v))
+                elif rel == "WRITES":
+                    written_fields.add(str(v))
+
+        touched_fields = list(read_fields | written_fields)
+        for f in touched_fields[:shared_field_limit]:
+            add(f, "shared state (field accessed by focus)", role="shared_field")
+            # Identify readers/writers of that field
+            for u, _, attrs in self.graph.in_edges(f, data=True):
+                rel = attrs.get("relation") or attrs.get("type")
+                if rel == "READS":
+                    add(u, f"shares field {f} (READS)", role="shared_field_reader")
+                elif rel == "WRITES":
+                    add(u, f"shares field {f} (WRITES)", role="shared_field_writer")
+
+        # 5) same-file helpers: nodes in same file as focus (bounded)
+        fp = self.graph.nodes[focus_node_id].get("file_path") if focus_node_id in self.graph else None
+        if fp:
+            nodes = list(self.file_to_nodes.get(str(fp), set()))
+            nodes.sort(key=lambda nid: 0 if self.graph.nodes[nid].get("type") in ("Method", "Field") else 1)
+            for nid in nodes[:same_file_limit]:
+                add(nid, f"same file helper ({fp})", role="same_file_helper")
+
+        # Enforce max_nodes budget
+        if len(selected) > max_nodes:
+            # Keep focus + seeds first, then by number of roles/reasons.
+            seed_ids = [s.node_id for s in seeds]
+            keep: List[str] = []
+            if focus_node_id and focus_node_id in selected:
+                keep.append(focus_node_id)
+            for nid in seed_ids:
+                if nid in selected and nid not in keep:
+                    keep.append(nid)
+            remaining = [nid for nid in selected if nid not in keep]
+            remaining.sort(
+                key=lambda nid: (len(roles.get(nid, set())), len(reasons.get(nid, []))),
+                reverse=True,
+            )
+            keep.extend(remaining[: max_nodes - len(keep)])
+            selected = set(keep)
+
+        # Build node payloads (stable ordering like an IDE preview)
+        nodes_payload = [
+            self._build_context_node(
+                nid,
+                reasons[nid],
+                roles=sorted(list(roles.get(nid, set()))),
+                focus_id=focus_node_id,
+            )
+            for nid in selected
+        ]
+
+        # Sort nodes by role priority
+        role_priority = {
+            "focus": 0,
+            "seed": 1,
+            "field_user": 2,
+            "callee": 2,
+            "caller": 2,
+            "shared_field_writer": 3,
+            "shared_field_reader": 4,
+            "shared_field": 5,
+            "same_class_member": 6,
+            "same_file_helper": 7,
+        }
+
+        def _node_sort_key(n: Dict) -> Tuple[int, str]:
+            rls = n.get("roles") or []
+            pri = min([role_priority.get(r, 99) for r in rls] or [99])
+            return pri, str(n.get("node_id"))
+
+        nodes_payload = sorted([node.__dict__ for node in nodes_payload], key=_node_sort_key)
+
+        # Collect edges among selected nodes for explainability
+        edges_payload = []
+        for u, v, attrs in self.graph.edges(data=True):
+            if u in selected and v in selected:
+                edges_payload.append({
+                    "source": u,
+                    "target": v,
+                    "relation": attrs.get("relation") or attrs.get("type"),
+                    "file_path": attrs.get("file_path"),
+                    "line": attrs.get("line"),
+                })
+
+        # IDE-style grouped views
+        call_graph_view = {
+            "callees": [{"node_id": nid, "depth": d} for nid, d in sorted(callees.items(), key=lambda kv: kv[1]) if nid in selected],
+            "callers": [{"node_id": nid, "depth": d} for nid, d in sorted(callers.items(), key=lambda kv: kv[1]) if nid in selected],
+        }
+
+        # For IDE preview, keep fields separated by access type
+        data_flow_view = {
+            "read_fields": [fid for fid in sorted(read_fields) if fid in selected],
+            "written_fields": [fid for fid in sorted(written_fields) if fid in selected],
+        }
+
+        same_class_view: List[str] = []
+        if focus_cls:
+            same_class_view = sorted([nid for nid in list(self.class_to_members.get(str(focus_cls), set())) if nid in selected])
+
+        same_file_view: List[str] = []
+        if fp:
+            same_file_view = sorted([nid for nid in list(self.file_to_nodes.get(str(fp), set())) if nid in selected])
+
+        return {
+            "query": query,
+            "focus_node": focus_node_id,
+            "seed_nodes": [{"node_id": s.node_id, "score": s.score} for s in seeds],
+            "nodes": nodes_payload,
+            "edges": edges_payload,
+            # New: IDE preview sub-views
+            "focus": {"node_id": focus_node_id},
+            "call_graph": call_graph_view,
+            "data_flow": data_flow_view,
+            "same_class": same_class_view,
+            "same_file": same_file_view,
+            "stats": {
+                "seed_top_k": seed_top_k,
+                "hops": hops,
+                "selected_nodes": len(nodes_payload),
+                "selected_edges": len(edges_payload),
+            },
+        }
+
+    # -------------------------
+    # Seed selection
+    # -------------------------
+    def _select_seeds(self, query: str, seed_top_k: int) -> List[ScoredNode]:
+        if query in self.graph:
+            return [ScoredNode(node_id=query, score=1.0)]
+        return self.vindex.search(query, top_k=seed_top_k, min_score=0.0)
+
+    # -------------------------
+    # Graph expansion helpers
+    # -------------------------
+    def _expand_relation_dir(self, start_nodes: List[str], relation: str, hops: int, direction: str) -> Dict[str, int]:
+        """Direction-aware BFS expansion.
+
+        direction:
+          - "out": follow out_edges (caller -> callee)
+          - "in":  follow in_edges  (callee <- caller)
+        Returns: node_id -> min depth (>=1)
+        """
+        if not start_nodes or not any(bool(s) for s in start_nodes):
+            return {}
+        depth_map: Dict[str, int] = {}
+        q: deque[Tuple[str, int]] = deque()
+        visited: Set[str] = set()
+
+        for s in start_nodes:
+            if not s:
+                continue
+            q.append((s, 0))
+            visited.add(s)
+
+        while q:
+            nid, d = q.popleft()
+            if d >= hops:
+                continue
+
+            if direction == "out":
+                edges = self.graph.out_edges(nid, data=True)
+                for _, v, attrs in edges:
+                    rel = attrs.get("relation") or attrs.get("type")
+                    if rel != relation:
+                        continue
+                    if v not in visited:
+                        visited.add(v)
+                        depth_map[str(v)] = min(depth_map.get(str(v), 10**9), d + 1)
+                        q.append((v, d + 1))
+            else:
+                edges = self.graph.in_edges(nid, data=True)
+                for u, _, attrs in edges:
+                    rel = attrs.get("relation") or attrs.get("type")
+                    if rel != relation:
+                        continue
+                    if u not in visited:
+                        visited.add(u)
+                        depth_map[str(u)] = min(depth_map.get(str(u), 10**9), d + 1)
+                        q.append((u, d + 1))
+
+        for s in start_nodes:
+            depth_map.pop(s, None)
+        return depth_map
+
+    def _expand_relation(self, seeds: List[str], relation: str, hops: int) -> Dict[str, int]:
+        """
+        Expand by following edges (both directions) that match `relation` up to `hops`.
+        Returns: node_id -> min depth
+        """
+        depth_map: Dict[str, int] = {}
+        q: deque[Tuple[str, int]] = deque()
+        visited: Set[str] = set()
+
+        for s in seeds:
+            q.append((s, 0))
+            visited.add(s)
+
+        while q:
+            nid, d = q.popleft()
+            if d >= hops:
+                continue
+
+            # out edges
+            for _, v, attrs in self.graph.out_edges(nid, data=True):
+                rel = attrs.get("relation") or attrs.get("type")
+                if rel != relation:
+                    continue
+                if v not in visited:
+                    visited.add(v)
+                    depth_map[str(v)] = min(depth_map.get(str(v), 10**9), d + 1)
+                    q.append((v, d + 1))
+
+            # in edges
+            for u, _, attrs in self.graph.in_edges(nid, data=True):
+                rel = attrs.get("relation") or attrs.get("type")
+                if rel != relation:
+                    continue
+                if u not in visited:
+                    visited.add(u)
+                    depth_map[str(u)] = min(depth_map.get(str(u), 10**9), d + 1)
+                    q.append((u, d + 1))
+
+        # Remove seeds
+        for s in seeds:
+            depth_map.pop(s, None)
+        return depth_map
+
+    # -------------------------
+    # Node payload
+    # -------------------------
+    def _build_context_node(
+        self,
+        node_id: str,
+        why: List[str],
+        *,
+        roles: List[str],
+        focus_id: str,
+    ) -> ContextNode:
+        """Build a traceable, IDE-like node payload.
+
+        roles: all roles assigned during selection.
+        focus_id: focus node id (used for ...)
+        """
+        attrs = self.graph.nodes[node_id]
+        ntype = str(attrs.get("type", "Unknown"))
+        name = str(attrs.get("name") or node_id)
+        fp = str(attrs.get("file_path", "") or "")
+        start_line = int(attrs.get("start_line", 0) or 0)
+        end_line = int(attrs.get("end_line", 0) or 0)
+        signature = str(attrs.get("signature", "") or "")
+        docstring = str(attrs.get("docstring", "") or "")
+
+        snippet = ""
+        if fp and start_line and end_line:
+            snippet = load_snippet(fp, start_line, end_line, max_lines=self.max_snippet_lines)
+
+        # Primary role (for UI / sorting) based on a simple priority.
+        role_priority = {
+            "focus": 0,
+            "seed": 1,
+            "callee": 2,
+            "caller": 2,
+            "shared_field_writer": 3,
+            "shared_field_reader": 4,
+            "shared_field": 5,
+            "same_class_member": 6,
+            "same_file_helper": 7,
+        }
+        primary_role = "other"
+        if node_id == focus_id and "focus" not in roles:
+            roles = ["focus"] + roles
+        if roles:
+            primary_role = sorted(roles, key=lambda r: role_priority.get(r, 99))[0]
+
+        # Highlight span (approx): find the first occurrence of the symbol name in the snippet.
+        highlight_span: Optional[Dict[str, int]] = None
+        token = str(attrs.get("name") or "")
+        if snippet and token and start_line:
+            for idx, line in enumerate(snippet.splitlines()):
+                if token in line:
+                    highlight_span = {"start_line": start_line + idx, "end_line": start_line + idx}
+                    break
+        if highlight_span is None and fp and start_line:
+            highlight_span = {"start_line": start_line, "end_line": start_line}
+
+        return ContextNode(
+            node_id=node_id,
+            name=name,
+            type=ntype,
+            file_path=fp,
+            start_line=start_line,
+            end_line=end_line,
+            signature=signature,
+            docstring=docstring,
+            snippet=snippet,
+            role=primary_role,
+            roles=roles,
+            highlight_span=highlight_span,
+            why=why,
+        )
+
+
+==================== END FILE ====================
+
+
+==================== FILE: src/graph_builder.py ====================
+"""
+Build a NetworkX code knowledge graph with traceable nodes.
+
+The graph is designed for two purposes:
+1) Visualization (optional)
+2) Retrieval-time neighborhood expansion (Graph-RAG)
+"""
+from __future__ import annotations
+
+from typing import Dict, Iterable, List, Optional, Tuple
+
+import networkx as nx
+
+
+class CodeGraphBuilder:
+    def __init__(self) -> None:
+        self.graph = nx.DiGraph()
+
+    def build_from_parsed_data(self, data: Dict) -> None:
+        """
+        Data format is produced by src.parser.JavaCodeParser.parse_project().
+        """
+        classes = data.get("classes", [])
+        methods = data.get("methods", [])
+        fields = data.get("fields", [])
+        relationships = data.get("relationships", [])
+
+        print(
+            f"📊 [GraphBuilder] classes={len(classes)} methods={len(methods)} fields={len(fields)} rels={len(relationships)}"
+        )
+
+        # 1) Add class nodes
+        for cls in classes:
+            node_id = cls["id"]
+            self.graph.add_node(
+                node_id,
+                **cls,
+            )
+
+        # 2) Add field nodes (+ membership edges)
+        for fld in fields:
+            node_id = fld["id"]
+            self.graph.add_node(node_id, **fld)
+            class_id = fld.get("class")
+            if class_id:
+                self.graph.add_edge(class_id, node_id, relation="CONTAINS", type="CONTAINS")
+
+        # 3) Add method nodes (+ membership edges)
+        for m in methods:
+            node_id = m["id"]
+            self.graph.add_node(node_id, **m)
+            class_id = m.get("class")
+            if class_id:
+                self.graph.add_edge(class_id, node_id, relation="CONTAINS", type="CONTAINS")
+
+        # Helper: normalize relationship targets.
+        # We preserve explicit namespaces produced by the parser:
+        #   - EXTERNAL::...
+        #   - UNRESOLVED::...
+        #   - UNRESOLVED_FIELD::...
+        # so we don't double-prefix them.
+        def _normalize_target_id(source_id: str, target_raw: str) -> str:
+            if target_raw in self.graph:
+                return target_raw
+            if target_raw.startswith(("EXTERNAL::", "UNRESOLVED::", "UNRESOLVED_FIELD::")):
+                return target_raw
+            # If target looks like a fully qualified id and doesn't exist, keep it anyway.
+            if "." in target_raw and "::" not in target_raw:
+                return target_raw
+            return f"UNRESOLVED::{target_raw}"
+
+        # 4) Add relationship edges
+        for rel in relationships:
+            src = rel["source"]
+            tgt_raw = rel["target"]
+            rel_type = rel["type"]
+
+            if src not in self.graph:
+                # Create minimal node for source if missing
+                self.graph.add_node(src, id=src, type="Unknown", name=src)
+
+            tgt = _normalize_target_id(src, tgt_raw)
+            if tgt not in self.graph:
+                # Create minimal node for unresolved/external targets
+                node_type = "Unresolved"
+                display_name = tgt_raw
+                if tgt.startswith("EXTERNAL::"):
+                    node_type = "External"
+                    display_name = tgt.split("::", 1)[1]
+                elif tgt.startswith("UNRESOLVED_FIELD::"):
+                    node_type = "Unresolved"
+                    display_name = tgt.split("::", 1)[1]
+                elif tgt.startswith("UNRESOLVED::"):
+                    node_type = "Unresolved"
+                    display_name = tgt.split("::", 1)[1]
+
+                self.graph.add_node(tgt, id=tgt, type=node_type, name=display_name)
+
+            self.graph.add_edge(
+                src,
+                tgt,
+                relation=rel_type,
+                type=rel_type,
+                file_path=rel.get("file_path"),
+                line=rel.get("line"),
+            )
+
+    def get_graph(self) -> nx.DiGraph:
+        return self.graph
+
+    # Optional: visualize graph (requires pyvis)
+    def visualize(self, output_file: str = "code_graph.html") -> None:
+        try:
+            from pyvis.network import Network  # type: ignore
+        except Exception as e:
+            raise ImportError(
+                "pyvis is required for visualization. Install with: pip install pyvis"
+            ) from e
+
+        net = Network(height="900px", width="100%", directed=True)
+
+        # Add nodes with lightweight styling based on type
+        for node_id, attrs in self.graph.nodes(data=True):
+            ntype = attrs.get("type", "Unknown")
+            title_parts = [f"{ntype}: {node_id}"]
+            for k in ("file_path", "start_line", "end_line", "signature"):
+                if attrs.get(k):
+                    title_parts.append(f"{k}: {attrs.get(k)}")
+            title = "\n".join(title_parts)
+
+            color = "#CCCCCC"
+            shape = "dot"
+            if ntype == "Class":
+                color = "#FF9999"
+                shape = "box"
+            elif ntype == "Method":
+                color = "#99CCFF"
+                shape = "ellipse"
+            elif ntype == "Field":
+                color = "#90EE90"
+                shape = "dot"
+
+            net.add_node(node_id, label=attrs.get("name", node_id), title=title, color=color, shape=shape)
+
+        for u, v, attrs in self.graph.edges(data=True):
+            rel = attrs.get("relation", "")
+            net.add_edge(u, v, label=rel, title=rel, arrows="to")
+
+        net.show(output_file)
+        print(f"🖼️ [Visualizer] saved: {output_file}")
+
+
+==================== END FILE ====================
+
+
+==================== FILE: src/agent/__init__.py ====================
+
+==================== END FILE ====================
+
+
+==================== FILE: src/agent/llm.py ====================
+from __future__ import annotations
+
+import json
+import os
+import time
+import urllib.request
+import urllib.error
+from dataclasses import dataclass
+from ..dotenv import auto_load_dotenv
+from typing import Any, Dict, List, Optional, Protocol, Tuple
+
+
+class LLMClient(Protocol):
+    def chat(self, messages: List[Dict[str, str]], *, temperature: float = 0.2, max_tokens: int = 1800) -> str:
+        ...
+
+
+@dataclass
+class OpenAICompatibleConfig:
+    """
+    A minimal OpenAI-compatible Chat Completions config.
+
+    Works with:
+      - OpenAI (if /v1/chat/completions is enabled)
+      - Many self-hosted servers (vLLM / LM Studio / OpenRouter-like gateways) that expose OpenAI-style endpoints.
+    """
+    base_url: str = "https://api.openai.com"
+    api_key: Optional[str] = None
+    model: str = "gpt-4.1-mini"
+    timeout_s: int = 120
+    max_retries: int = 2
+    retry_backoff_s: float = 1.5
+    # If True, do not verify TLS certs (NOT recommended). Kept for corporate proxies edge cases.
+    insecure_skip_verify: bool = False
+
+
+class OpenAICompatibleChatClient:
+    def __init__(self, cfg: OpenAICompatibleConfig):
+        self.cfg = cfg
+        if not self.cfg.api_key:
+            # Try loading from a local .env file (common in research demos).
+            auto_load_dotenv(os.environ.get("REFAC_DOTENV") or os.environ.get("DOTENV_PATH"))
+            self.cfg.api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_APIKEY")
+
+    def chat(self, messages: List[Dict[str, str]], *, temperature: float = 0.2, max_tokens: int = 1800) -> str:
+        if not self.cfg.api_key:
+            raise RuntimeError(
+                "Missing API key. Set OpenAICompatibleConfig.api_key or environment variable OPENAI_API_KEY."
+            )
+        url = self.cfg.base_url.rstrip("/") + "/v1/chat/completions"
+
+        payload = {
+            "model": self.cfg.model,
+            "messages": messages,
+            "temperature": float(temperature),
+            "max_tokens": int(max_tokens),
+        }
+        data = json.dumps(payload).encode("utf-8")
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {self.cfg.api_key}",
+        }
+
+        last_err: Optional[Exception] = None
+        for attempt in range(self.cfg.max_retries + 1):
+            try:
+                req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+                ctx = None
+                if self.cfg.insecure_skip_verify:
+                    import ssl
+                    ctx = ssl._create_unverified_context()
+                with urllib.request.urlopen(req, timeout=self.cfg.timeout_s, context=ctx) as resp:
+                    raw = resp.read().decode("utf-8", errors="replace")
+                obj = json.loads(raw)
+                # OpenAI-style response: choices[0].message.content
+                return obj["choices"][0]["message"]["content"]
+            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError) as e:
+                last_err = e
+                if attempt >= self.cfg.max_retries:
+                    break
+                time.sleep(self.cfg.retry_backoff_s * (attempt + 1))
+        raise RuntimeError(f"LLM request failed after retries: {last_err}") from last_err
+
+
+class DummyEchoLLM:
+    """
+    For dry-runs without an API key.
+
+    This dummy client tries to be *structurally compatible* with the agent:
+      - For planning prompts that require STRICT JSON, it returns a minimal valid plan.
+      - For edit/repair prompts, it returns a harmless "create a new file" rewrite
+        so the patch parser/apply step succeeds and verification can run.
+
+    IMPORTANT: This does NOT attempt to accomplish the user's refactoring request.
+    """
+    def chat(self, messages: List[Dict[str, str]], *, temperature: float = 0.2, max_tokens: int = 1800) -> str:
+        system = ""
+        for m in messages:
+            if m.get("role") == "system":
+                system = str(m.get("content") or "")
+                break
+
+        # 1) Plan stage: must be valid JSON
+        if "Return STRICT JSON" in system and "refactoring plan" in system.lower():
+            plan = {
+                "objective": "DRY RUN (no-op)",
+                "assumptions": ["This is a dry run using DummyEchoLLM."],
+                "steps": ["Do not change code."],
+                "files_to_change": [],
+                "verification": [],
+                "tool_requests": [],
+            }
+            return json.dumps(plan)
+
+        # 2) Edit/repair stage: return a valid edit instruction that applies cleanly
+        if "output ONLY edit instructions" in system:
+            return (
+                "FILE: DRY_RUN_NOOP.txt\n"
+                "<<<<<<< REWRITE\n"
+                "DRY RUN: DummyEchoLLM created this file so the patch-apply step is exercised.\n"
+                ">>>>>>> REWRITE\n"
+            )
+
+        # Fallback
+        return "{}"
+
+==================== END FILE ====================
+
+
+==================== FILE: src/agent/prompts.py ====================
+from __future__ import annotations
+
+import json
+from typing import Any, Dict, List
+
+
+TRUNCATION_TOKEN = "<TRUNCATED>"
+
+def _trim(s: str, max_chars: int) -> str:
+    """Safely truncate text for prompts without using '...' (which breaks Search/Replace exactness)."""
+    if s is None:
+        return ""
+    s = str(s)
+    if len(s) <= max_chars:
+        return s
+    # Keep as much as possible and append a sentinel token that must NEVER be copied into patches.
+    keep = max(0, max_chars - len(TRUNCATION_TOKEN) - 1)
+    return (s[:keep] + " " + TRUNCATION_TOKEN).rstrip()
+
+
+def context_pack_to_prompt(pack: Dict[str, Any], *, max_nodes: int = 18, max_snippet_chars: int = 2200) -> str:
+    """
+    Convert context_pack.json into a compact, LLM-friendly text block.
+    """
+    query = pack.get("query", "")
+    focus = (pack.get("focus") or {}).get("node_id") or pack.get("focus_node") or ""
+    seed_nodes = pack.get("seed_nodes", [])
+
+    nodes = pack.get("nodes", [])
+    def node_key(n):
+        role = n.get("role", "")
+        order = {"focus": 0, "seed": 1, "caller": 2, "callee": 3}.get(role, 9)
+        return (order, n.get("type",""), n.get("node_id",""))
+
+    nodes_sorted = sorted(nodes, key=node_key)[:max_nodes]
+
+    out: List[str] = []
+    out.append(f"Retrieval query: {query}")
+    out.append(f"Focus node: {focus}")
+    if seed_nodes:
+        out.append("Seed nodes (vector search):")
+        for s in seed_nodes[:8]:
+            out.append(f"  - {s.get('node_id')} (score={s.get('score')})")
+    out.append("")
+    out.append("=== Context Nodes (with code excerpts) ===")
+    for n in nodes_sorted:
+        nid = n.get("node_id")
+        typ = n.get("type")
+        fp = n.get("file_path")
+        sl = n.get("start_line")
+        el = n.get("end_line")
+        sig = _trim(n.get("signature",""), 240)
+        roles = n.get("roles", [])
+        why = n.get("why", [])
+        snippet = _trim(n.get("snippet",""), max_snippet_chars)
+        out.append(f"\n[{typ}] {nid}")
+        if fp:
+            out.append(f"Location: {fp}:{sl}-{el}")
+        if sig:
+            out.append(f"Signature: {sig}")
+        if roles:
+            out.append(f"Roles: {', '.join(map(str, roles))}")
+        if why:
+            why_short = [str(x) for x in why][:5]
+            out.append("Why selected:")
+            for w in why_short:
+                out.append(f"  - {w}")
+        if snippet:
+            out.append("Code:")
+            out.append(snippet)
+    out.append("\n=== End Context ===")
+    return "\n".join(out)
+
+
+PLAN_SYSTEM = """You are a senior software engineer designing a safe automated refactoring plan.
+You must be concise, risk-aware, and verification-driven.
+Return STRICT JSON only (no markdown, no commentary outside JSON)."""
+
+PLAN_USER_TEMPLATE = """Given the user request and the provided context pack, propose a refactoring plan.
+
+Hard requirements (MUST follow exactly):
+{hard_requirements}
+
+Requirements:
+- The goal is behavior-preserving refactoring.
+- Only modify files that are necessary.
+- Include a verification plan (commands) that can run in a sandbox (no shell operators like &&, |, >).
+- Include risk notes.
+- Optional: request additional information using tool_requests.
+- IMPORTANT: All paths must be repo-root-relative, like "src/main/java/...". Do NOT prefix with "data/marketing-demo/".
+
+Return JSON with this schema:
+{{
+  "objective": "...",
+  "assumptions": ["..."],
+  "steps": ["..."],
+  "files_to_change": [{{"file_path":"...", "why":"...", "risk":"low|medium|high"}}],
+  "verification": [{{"name":"...", "cmd":"..."}}],
+  "tool_requests": [{{"tool":"ripgrep", "pattern":"...", "path":"..."}}]
+}}
+
+User request:
+{request}
+
+Context pack:
+{context}
+"""
+
+
+EDIT_SYSTEM = """You are a senior software engineer.
+You MUST output ONLY edit instructions using either Search/Replace blocks (preferred) or Full Rewrite blocks.
+No markdown. No explanation. No code fences.
+
+FORMAT (Search/Replace blocks - preferred):
+FILE: <repo-relative-path>
+<<<<<<< SEARCH
+<exact text copied from the current file>
+=======
+<replacement text>
+>>>>>>> REPLACE
+
+You may include multiple SEARCH/REPLACE blocks under the same FILE.
+
+FORMAT (Full Rewrite - allowed for small files):
+FILE: <repo-relative-path>
+<<<<<<< REWRITE
+<entire new file content>
+>>>>>>> REWRITE
+
+RULES:
+- Do NOT use "..." anywhere.
+- Do NOT output the token "<TRUNCATED>" anywhere.
+- Do NOT output the token "<TRUNCATED_FILE_CONTENT>" anywhere. Do NOT omit code.
+- Do NOT abbreviate file paths.
+- For Search/Replace: the SEARCH text MUST match EXACTLY ONE occurrence in the current file.
+- Keep changes minimal and behavior-preserving.
+- If a file is shown as MISSING in the 'EXACT REPO FILE CONTENTS' section, you MUST create it using a Full Rewrite block.
+- You ARE allowed to create new files when required by the task; always use Full Rewrite for new files.
+"""
+
+
+EDIT_USER_TEMPLATE = """Task: {objective}
+
+Refactoring plan (JSON):
+{plan_json}
+
+Hard requirements (MUST follow exactly):
+{hard_requirements}
+
+Context pack with code excerpts:
+{context}
+
+IMPORTANT:
+- Use file paths relative to the repo root (e.g., "src/main/java/..."). Do NOT prefix with "data/marketing-demo/".
+- Output MUST be ONLY edit instructions (no commentary).
+- Prefer Search/Replace blocks (stable). Use Full Rewrite only when necessary.
+- If a file is marked MISSING in the prompt, you MUST create it via Full Rewrite.
+- Do NOT use "..." anywhere; do NOT shorten paths or code.
+- Do NOT output the token "<TRUNCATED>" anywhere; it is a prompt sentinel, not code.
+- Do NOT output the token "<TRUNCATED_FILE_CONTENT>" anywhere; it is a prompt sentinel, not code.
+
+If the prompt includes a section named "EXACT REPO FILE CONTENTS (authoritative)", you MUST use that as the source of truth.
+
+Return an UPDATED FULL set of edit instructions that should pass verification.
+Return ONLY the edit instructions.
+"""
+
+
+REPAIR_SYSTEM = """You are a senior software engineer.
+You MUST output ONLY edit instructions using either Search/Replace blocks (preferred) or Full Rewrite blocks.
+No markdown. No explanation. No code fences.
+
+You are given previous edit instructions and failure logs. Produce an UPDATED FULL set of instructions
+(relative to the ORIGINAL codebase) that fixes the failures while keeping changes minimal and behavior-preserving.
+
+FORMAT (Search/Replace blocks - preferred):
+FILE: <repo-relative-path>
+<<<<<<< SEARCH
+<exact text copied from the current file>
+=======
+<replacement text>
+>>>>>>> REPLACE
+
+FORMAT (Full Rewrite - allowed for small files):
+FILE: <repo-relative-path>
+<<<<<<< REWRITE
+<entire new file content>
+>>>>>>> REWRITE
+
+RULES:
+- Do NOT use "..." anywhere.
+- Do NOT output the token "<TRUNCATED>" anywhere.
+- Do NOT output the token "<TRUNCATED_FILE_CONTENT>" anywhere. Do NOT omit code.
+- Do NOT abbreviate file paths.
+- For Search/Replace: the SEARCH text MUST match EXACTLY ONE occurrence in the current file.
+- Keep changes minimal and behavior-preserving.
+- If a file is shown as MISSING in the 'EXACT REPO FILE CONTENTS' section, you MUST create it using a Full Rewrite block.
+- You ARE allowed to create new files when required by the task; always use Full Rewrite for new files.
+"""
+
+
+REPAIR_USER_TEMPLATE = """Task: {objective}
+
+Refactoring plan (JSON):
+{plan_json}
+
+Hard requirements (MUST follow exactly):
+{hard_requirements}
+
+Previous edit instructions (that failed to apply or failed verification):
+{prev_patch}
+
+Failure / verification outputs:
+{verify_logs}
+
+Context pack with code excerpts:
+{context}
+
+IMPORTANT:
+- Use file paths relative to the repo root (e.g., "src/main/java/..."). Do NOT prefix with "data/marketing-demo/".
+- Output MUST be ONLY edit instructions (no commentary).
+- Prefer Search/Replace blocks (stable). Use Full Rewrite only when necessary.
+- If a file is marked MISSING in the prompt, you MUST create it via Full Rewrite.
+- Do NOT use "..." anywhere; do NOT shorten paths or code.
+- Do NOT output the token "<TRUNCATED>" anywhere; it is a prompt sentinel, not code.
+- Do NOT output the token "<TRUNCATED_FILE_CONTENT>" anywhere; it is a prompt sentinel, not code.
+- If apply failed because SEARCH did not match, adjust the SEARCH blocks to match the exact current file text (include more surrounding context).
+
+If the prompt includes a section named "EXACT REPO FILE CONTENTS (authoritative)", you MUST use that as the source of truth.
+
+Return an UPDATED FULL set of edit instructions that should pass verification.
+Return ONLY the edit instructions.
+"""
+
+
+==================== END FILE ====================
+
+
+==================== FILE: src/agent/sandbox.py ====================
+from __future__ import annotations
+
+import os
+import glob
+import shlex
+import subprocess
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import List, Optional, Tuple
+
+
+@dataclass
+class CommandResult:
+    cmd: List[str]
+    returncode: int
+    stdout: str
+    stderr: str
+
+    @property
+    def ok(self) -> bool:
+        return self.returncode == 0
+
+
+@dataclass
+class SandboxConfig:
+    root_dir: Path
+    timeout_s: int = 240
+    allowed_commands: List[str] = field(default_factory=lambda: [
+        # Search / inspection
+        "rg", "grep", "find", "ls", "cat", "sed", "python", "python3",
+        # Build / test
+        "mvn", "./mvnw", "gradle", "./gradlew", "npm", "pnpm", "yarn",
+        "pytest",
+        # Format / lint (optional)
+        "black", "ruff", "prettier", "eslint", "google-java-format",
+        # git (optional)
+        "git",
+        # java tools
+        "javac", "java"
+    ])
+    use_docker: bool = False
+    docker_image: str = "python:3.10-slim"  # user should override for Java/Maven projects
+    docker_workdir: str = "/repo"
+
+
+class Sandbox:
+    """
+    Runs commands in a controlled way:
+    - shell=False (no pipes/&&)
+    - only whitelisted base commands
+    - optionally run inside a docker container with repo mounted read-write
+    """
+    def __init__(self, cfg: SandboxConfig):
+        self.cfg = cfg
+        self.cfg.root_dir = Path(self.cfg.root_dir).resolve()
+
+    def _is_allowed(self, cmd: List[str]) -> bool:
+        if not cmd:
+            return False
+        base = cmd[0]
+        return base in set(self.cfg.allowed_commands)
+
+    def _expand_globs(self, cmd: List[str], *, cwd: Path) -> List[str]:
+        """Expand shell-style globs (* ? [..]) because we run with shell=False.
+
+        This matches typical shell behavior for arguments like 'src/**/*.java'.
+        If a pattern has no matches, it is kept as-is.
+        """
+        expanded: List[str] = []
+        for arg in cmd:
+            # Skip options (e.g. '-cp') and URLs etc.; only expand likely file patterns
+            if any(ch in arg for ch in ("*", "?", "[")) and not arg.startswith("-"):
+                matches = glob.glob(str(cwd / arg), recursive=True)
+                if matches:
+                    # Make matches relative to cwd for nicer logs and compatibility
+                    for mpath in sorted(matches):
+                        expanded.append(os.path.relpath(mpath, str(cwd)))
+                    continue
+            expanded.append(arg)
+        return expanded
+
+
+    def run(self, cmd: List[str], *, cwd: Optional[Path] = None) -> CommandResult:
+        if not self._is_allowed(cmd):
+            raise PermissionError(f"Command not allowed: {cmd}. Allowed={self.cfg.allowed_commands}")
+
+        cwd = (cwd or self.cfg.root_dir).resolve()
+
+        # Expand globs like *.java because we run with shell=False
+        cmd = self._expand_globs(cmd, cwd=cwd)
+
+        # Ensure cwd stays inside root_dir
+        if not str(cwd).startswith(str(self.cfg.root_dir)):
+            raise PermissionError(f"cwd must be inside sandbox root: {cwd}")
+
+        if self.cfg.use_docker:
+            return self._run_in_docker(cmd, cwd=cwd)
+
+        # Local run
+        p = subprocess.run(
+            cmd,
+            cwd=str(cwd),
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=self.cfg.timeout_s,
+        )
+        return CommandResult(cmd=cmd, returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
+
+    def _run_in_docker(self, cmd: List[str], *, cwd: Path) -> CommandResult:
+        # Map cwd relative to repo root into container workdir
+        rel = cwd.relative_to(self.cfg.root_dir)
+        workdir = str(Path(self.cfg.docker_workdir) / rel)
+
+        docker_cmd = [
+            "docker", "run", "--rm",
+            "-v", f"{self.cfg.root_dir}:{self.cfg.docker_workdir}",
+            "-w", workdir,
+            self.cfg.docker_image
+        ] + cmd
+
+        # NOTE: we intentionally do NOT allow arbitrary docker args from the LLM; only from config.
+        p = subprocess.run(
+            docker_cmd,
+            shell=False,
+            capture_output=True,
+            text=True,
+            timeout=self.cfg.timeout_s,
+        )
+        return CommandResult(cmd=docker_cmd, returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
+
+    @staticmethod
+    def split_cmd(cmd_str: str) -> List[str]:
+        # shlex split (still safe because we run shell=False)
+        return shlex.split(cmd_str)
+
+
+==================== END FILE ====================
+
+
+==================== FILE: src/agent/patcher.py ====================
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+from pathlib import Path
+from typing import List, Optional
+
+
+@dataclass
+class HunkLine:
+    tag: str  # ' ', '+', '-'
+    text: str
+
+
+@dataclass
+class Hunk:
+    src_start: int
+    src_len: int
+    dst_start: int
+    dst_len: int
+    lines: List[HunkLine]
+
+
+@dataclass
+class FilePatch:
+    old_path: str
+    new_path: str
+    hunks: List[Hunk]
+
+
+_DIFF_GIT_RE = re.compile(r"^diff --git a/(.+?) b/(.+)$")
+_HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+_OLD_RE = re.compile(r"^---\s+(?:a/)?(.+)$")
+_NEW_RE = re.compile(r"^\+\+\+\s+(?:b/)?(.+)$")
+
+
+class PatchApplyError(Exception):
+    pass
+
+
+def parse_unified_diff(diff_text: str) -> List[FilePatch]:
+    """
+    Parses a subset of unified diff enough for LLM-generated patches.
+    Supports:
+      diff --git a/... b/...
+      --- a/...
+      +++ b/...
+      @@ -l,s +l,s @@ hunks
+    """
+    lines = diff_text.splitlines()
+    i = 0
+    patches: List[FilePatch] = []
+
+    current_old = None
+    current_new = None
+    current_hunks: List[Hunk] = []
+
+    def flush():
+        nonlocal current_old, current_new, current_hunks
+        if current_old and current_new:
+            patches.append(FilePatch(old_path=current_old, new_path=current_new, hunks=current_hunks))
+        current_old = None
+        current_new = None
+        current_hunks = []
+
+    while i < len(lines):
+        line = lines[i]
+
+        m = _DIFF_GIT_RE.match(line)
+        if m:
+            flush()
+            current_old, current_new = m.group(1), m.group(2)
+            i += 1
+            continue
+
+        m = _OLD_RE.match(line)
+        if m:
+            if current_old is None and current_new is None:
+                current_old = m.group(1)
+            i += 1
+            continue
+
+        m = _NEW_RE.match(line)
+        if m:
+            if current_new is None:
+                current_new = m.group(1)
+            i += 1
+            continue
+
+        m = _HUNK_RE.match(line)
+        if m:
+            src_start = int(m.group(1))
+            src_len = int(m.group(2) or "1")
+            dst_start = int(m.group(3))
+            dst_len = int(m.group(4) or "1")
+            i += 1
+
+            hunk_lines: List[HunkLine] = []
+            while i < len(lines):
+                hl = lines[i]
+                if hl.startswith("diff --git ") or hl.startswith("@@ "):
+                    break
+                if hl.startswith("--- ") or hl.startswith("+++ "):
+                    break
+                if hl.startswith("\\ No newline"):
+                    i += 1
+                    continue
+
+                if hl == "":
+                    # treat empty as context blank line
+                    hunk_lines.append(HunkLine(tag=" ", text=""))
+                    i += 1
+                    continue
+
+                tag = hl[0]
+                if tag not in (" ", "+", "-"):
+                    break
+
+                # normalize CRLF artifacts
+                txt = hl[1:].rstrip("\r")
+                hunk_lines.append(HunkLine(tag=tag, text=txt))
+                i += 1
+
+            current_hunks.append(Hunk(src_start, src_len, dst_start, dst_len, hunk_lines))
+            continue
+
+        i += 1
+
+    flush()
+    return patches
+
+
+def _safe_join(root: Path, rel: str) -> Path:
+    rel = rel.replace("\\", "/").lstrip("/")
+    p = (root / rel).resolve()
+    if not str(p).startswith(str(root.resolve())):
+        raise PatchApplyError(f"Unsafe path in patch: {rel}")
+    return p
+
+
+def normalize_patch_path(root_dir: Path, rel: str) -> str:
+    """
+    Normalize patch file paths to be relative to root_dir.
+
+    Handles cases like:
+      data/marketing-demo/src/main/java/...  (but root_dir is already marketing-demo)
+    """
+    root_dir = Path(root_dir).resolve()
+    rel = (rel or "").replace("\\", "/").lstrip("/")
+    if not rel:
+        return rel
+
+    # 1) As-is
+    try:
+        p = _safe_join(root_dir, rel)
+        if p.exists():
+            return rel
+    except PatchApplyError:
+        pass
+
+    parts = [x for x in rel.split("/") if x]
+    if len(parts) <= 1:
+        return rel
+
+    # 2) Try suffixes that exist as files
+    for i in range(1, len(parts)):
+        cand = "/".join(parts[i:])
+        try:
+            p2 = _safe_join(root_dir, cand)
+        except PatchApplyError:
+            continue
+        if p2.exists():
+            return cand
+
+    # 3) For new files: try suffixes whose parent exists
+    for i in range(1, len(parts)):
+        cand = "/".join(parts[i:])
+        try:
+            p2 = _safe_join(root_dir, cand)
+        except PatchApplyError:
+            continue
+        if p2.parent.exists():
+            return cand
+
+    return rel
+
+
+def _seek_line(lines: List[str], cursor: int, text: str, window: int = 60) -> Optional[int]:
+    """
+    Find `text` near `cursor` within +/- window.
+    Returns best matched index (closest), or None.
+    """
+    n = len(lines)
+    if n == 0:
+        return None
+    cursor = max(0, min(cursor, n - 1))
+
+    best = None
+    best_dist = 10**9
+
+    start = max(0, cursor - window)
+    end = min(n - 1, cursor + window)
+    for i in range(start, end + 1):
+        if lines[i] == text:
+            dist = abs(i - cursor)
+            if dist < best_dist:
+                best_dist = dist
+                best = i
+                if dist == 0:
+                    break
+    return best
+
+
+def apply_unified_diff(diff_text: str, *, root_dir: Path, dry_run: bool = False) -> List[Path]:
+    """
+    Applies unified diff to files under root_dir.
+    Returns list of modified file paths (absolute).
+    """
+    root_dir = Path(root_dir).resolve()
+    patches = parse_unified_diff(diff_text)
+    if not patches:
+        raise PatchApplyError("No file patches found in diff.")
+
+    modified: List[Path] = []
+
+    for fp in patches:
+        old_path = fp.old_path
+        new_path = fp.new_path
+
+        if old_path == "/dev/null":
+            old_path = ""
+        if new_path == "/dev/null":
+            new_path = ""
+
+        target_rel = new_path or old_path
+        if not target_rel:
+            raise PatchApplyError("Patch missing target path.")
+
+        target_rel = normalize_patch_path(root_dir, target_rel)
+        target = _safe_join(root_dir, target_rel)
+
+        if target.exists():
+            old_text = target.read_text(encoding="utf-8", errors="replace")
+            old_lines = [ln.rstrip("\r") for ln in old_text.splitlines()]
+        else:
+            old_lines = []
+
+        new_lines = old_lines[:]
+
+        line_offset = 0
+        for h in fp.hunks:
+            idx = max(0, h.src_start - 1 + line_offset)
+            cursor = min(idx, max(0, len(new_lines) - 1)) if new_lines else 0
+
+            for hl in h.lines:
+                if hl.tag == " ":
+                    if cursor >= len(new_lines) or new_lines[cursor] != hl.text:
+                        found = _seek_line(new_lines, cursor, hl.text, window=60)
+                        if found is None:
+                            raise PatchApplyError(
+                                f"Context mismatch while applying hunk to {target_rel}: "
+                                f"expected '{hl.text}' near line {cursor+1}"
+                            )
+                        cursor = found
+                    cursor += 1
+
+                elif hl.tag == "-":
+                    if cursor >= len(new_lines) or new_lines[cursor] != hl.text:
+                        found = _seek_line(new_lines, cursor, hl.text, window=30)
+                        if found is None:
+                            raise PatchApplyError(
+                                f"Removal mismatch while applying hunk to {target_rel}: "
+                                f"expected to remove '{hl.text}' near line {cursor+1}"
+                            )
+                        cursor = found
+                    del new_lines[cursor]
+                    line_offset -= 1
+
+                elif hl.tag == "+":
+                    new_lines.insert(cursor, hl.text)
+                    cursor += 1
+                    line_offset += 1
+
+        if not dry_run:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("\n".join(new_lines) + ("\n" if new_lines else ""), encoding="utf-8")
+        modified.append(target)
+
+    return modified
+
+
+def list_target_files(diff_text: str) -> List[str]:
+    patches = parse_unified_diff(diff_text)
+    out: List[str] = []
+    for fp in patches:
+        target_rel = fp.new_path or fp.old_path
+        if target_rel and target_rel not in out:
+            out.append(target_rel)
+    return out
+
+
+==================== END FILE ====================
+
+
+==================== FILE: src/agent/agent.py ====================
 from __future__ import annotations
 
 import json
@@ -2899,6 +4270,19 @@ class AgentConfig:
     # Default False to avoid brittle verification steps.
     use_plan_verification: bool = False
 
+
+    # Execution
+    # - monolithic: one large patch per attempt (original behavior)
+    # - stepwise: split into small steps (recommended; improves patch applicability and reduces truncation)
+    execution_mode: str = "stepwise"  # "monolithic" or "stepwise"
+    step_max_files: int = 10           # when auto-splitting, max files per step
+    verify_each_step: bool = True     # run verification after each step
+    enforce_file_whitelist: bool = True  # prevent edits outside plan files_to_change
+    allow_new_files: bool = True      # allow creating new files via Full Rewrite
+
+    # LLM output budgets (increase to reduce truncation)
+    edit_max_tokens: int = 4000
+    repair_max_tokens: int = 6000
     # Sandbox
     sandbox_timeout_s: int = 240
     use_docker: bool = False
@@ -3237,16 +4621,19 @@ class RefactoringAgent:
                 return resolved or None
         return None
 
-    def _dump_files_for_prompt(self, plan: Dict[str, Any], context_pack: Dict[str, Any], *, max_chars_per_file: int = 22000) -> str:
+    def _dump_files_for_prompt(self, plan: Dict[str, Any], context_pack: Dict[str, Any], *, max_chars_per_file: int = 22000, only_files: Optional[List[str]] = None) -> str:
         """
         Append exact file contents from the sandbox workdir so the LLM can produce an apply-able patch.
         Uses normalized plan file paths; if missing, falls back to focus file.
         """
         rel_files: List[str] = []
-        for f in (plan.get("files_to_change") or []):
-            fp = (f.get("file_path") or "").strip()
-            if fp:
-                rel_files.append(fp)
+        if only_files:
+            rel_files.extend([str(x).strip() for x in only_files if str(x).strip()])
+        else:
+            for f in (plan.get("files_to_change") or []):
+                fp = (f.get("file_path") or "").strip()
+                if fp:
+                    rel_files.append(fp)
 
         if not rel_files:
             focus_fp = self._focus_file_from_context_pack(context_pack)
@@ -3258,17 +4645,55 @@ class RefactoringAgent:
         rel_files = [x for x in rel_files if not (x in seen or seen.add(x))]
 
         blocks = []
-        for rel in rel_files[:6]:
+        max_files = len(rel_files) if only_files else max(6, self.cfg.step_max_files)
+        for rel in rel_files[:max_files]:
             p = (self.work_dir / rel).resolve()
             if not str(p).startswith(str(self.work_dir)):
                 continue
             if not p.exists() or not p.is_file():
+                # Expose missing files to the LLM so it can create them via Full Rewrite.
+                blocks.append(
+                    f"\n--- FILE: {rel} (MISSING) ---\n"
+                    "/* This file does not exist yet. Create it using a Full Rewrite (REWRITE) block. */\n"
+                    f"--- END FILE: {rel} ---\n"
+                )
                 continue
             txt = p.read_text(encoding="utf-8", errors="replace")
             if len(txt) > max_chars_per_file:
-                txt = txt[:max_chars_per_file] + "\n/* ... TRUNCATED ... */\n"
+                txt = txt[:max_chars_per_file] + "\n/* <TRUNCATED_FILE_CONTENT> */\n"
             blocks.append(f"\n--- FILE: {rel} ---\n{txt}\n--- END FILE: {rel} ---\n")
         return "\n".join(blocks)
+
+
+    def _is_safe_repo_path(self, p: str) -> bool:
+        """Conservative filter: only allow expanding scope to real source files."""
+        if not p:
+            return False
+        p = p.replace("\\", "/").lstrip("./")
+        # block path traversal
+        if ".." in Path(p).parts:
+            return False
+        # adjust prefixes as needed for your repos
+        return p.startswith(("src/", "lib/", "app/", "tests/", "test/"))
+
+    def _extract_apply_search_mismatch_files(self, logs: str) -> List[str]:
+        """Extract file paths from edit-apply errors like 'SEARCH block not found in <file>'"""
+        if not logs:
+            return []
+        paths = re.findall(r"\[EDIT APPLY ERROR\] SEARCH block not found in ([^\s]+)", logs)
+        out: List[str] = []
+        seen = set()
+        for p in paths:
+            p = (p or "").strip()
+            if not p:
+                continue
+            # normalize
+            p = p.replace("\\", "/").lstrip("./")
+            if p in seen:
+                continue
+            seen.add(p)
+            out.append(p)
+        return out
 
     # ---------------------------
     # Plan / Edit / Repair
@@ -3282,7 +4707,7 @@ class RefactoringAgent:
         )
         messages = [
             {"role": "system", "content": PLAN_SYSTEM},
-            {"role": "user", "content": PLAN_USER_TEMPLATE.format(request=request, context=context_txt)},
+            {"role": "user", "content": PLAN_USER_TEMPLATE.format(request=request, context=context_txt, hard_requirements=self._hard_requirements_text(context_pack))},
         ]
         out = self.llm.chat(messages, temperature=0.1, max_tokens=1400)
         plan = self._extract_json(out)
@@ -3304,16 +4729,22 @@ class RefactoringAgent:
                     res = self.sandbox.run(cmd, cwd=self.work_dir)
                     chunks.append(f"[TOOL rg] cmd={' '.join(cmd)}\n{res.stdout}\n{res.stderr}".strip())
                 except Exception as e:
-                    chunks.append(f"[TOOL rg ERROR] {e}")
+                    # Fallback to grep if rg is not available in the environment.
+                    try:
+                        gcmd = ["grep", "-R", "-n", "--", pattern, path]
+                        gres = self.sandbox.run(gcmd, cwd=self.work_dir)
+                        chunks.append(f"[TOOL grep] cmd={' '.join(gcmd)}\n{gres.stdout}\n{gres.stderr}".strip())
+                    except Exception as e2:
+                        chunks.append(f"[TOOL rg ERROR] {e}\n[TOOL grep ERROR] {e2}")
         return "\n\n".join(chunks)
 
-    def _edit(self, *, objective: str, plan: Dict[str, Any], context_pack: Dict[str, Any], extra_tool_info: str = "") -> str:
+    def _edit(self, *, objective: str, plan: Dict[str, Any], context_pack: Dict[str, Any], extra_tool_info: str = "", only_files: Optional[List[str]] = None) -> str:
         context_txt = context_pack_to_prompt(
             context_pack,
             max_nodes=self.cfg.max_nodes_in_prompt,
             max_snippet_chars=self.cfg.max_snippet_chars,
         )
-        file_dump = self._dump_files_for_prompt(plan, context_pack)
+        file_dump = self._dump_files_for_prompt(plan, context_pack, only_files=only_files)
         if file_dump:
             context_txt += "\n\n=== EXACT REPO FILE CONTENTS (authoritative) ===\n" + file_dump + "\n=== END EXACT FILE CONTENTS ===\n"
         if extra_tool_info:
@@ -3322,18 +4753,18 @@ class RefactoringAgent:
         plan_json = json.dumps(plan, ensure_ascii=False, indent=2)
         messages = [
             {"role": "system", "content": EDIT_SYSTEM},
-            {"role": "user", "content": EDIT_USER_TEMPLATE.format(objective=objective, plan_json=plan_json, context=context_txt)},
+            {"role": "user", "content": EDIT_USER_TEMPLATE.format(objective=objective, plan_json=plan_json, context=context_txt, hard_requirements=self._hard_requirements_text(context_pack))},
         ]
-        patch = self.llm.chat(messages, temperature=0.2, max_tokens=2600)
+        patch = self.llm.chat(messages, temperature=0.2, max_tokens=self.cfg.edit_max_tokens)
         return (patch or "").strip()
 
-    def _repair(self, *, objective: str, plan: Dict[str, Any], context_pack: Dict[str, Any], prev_patch: str, verify_logs: str, extra_tool_info: str = "") -> str:
+    def _repair(self, *, objective: str, plan: Dict[str, Any], context_pack: Dict[str, Any], prev_patch: str, verify_logs: str, extra_tool_info: str = "", only_files: Optional[List[str]] = None) -> str:
         context_txt = context_pack_to_prompt(
             context_pack,
             max_nodes=self.cfg.max_nodes_in_prompt,
             max_snippet_chars=self.cfg.max_snippet_chars,
         )
-        file_dump = self._dump_files_for_prompt(plan, context_pack)
+        file_dump = self._dump_files_for_prompt(plan, context_pack, only_files=only_files)
         if file_dump:
             context_txt += "\n\n=== EXACT REPO FILE CONTENTS (authoritative) ===\n" + file_dump + "\n=== END EXACT FILE CONTENTS ===\n"
         if extra_tool_info:
@@ -3347,10 +4778,11 @@ class RefactoringAgent:
                 plan_json=plan_json,
                 prev_patch=prev_patch,
                 verify_logs=verify_logs,
-                context=context_txt
+                context=context_txt,
+                hard_requirements=self._hard_requirements_text(context_pack)
             )},
         ]
-        patch = self.llm.chat(messages, temperature=0.2, max_tokens=3000)
+        patch = self.llm.chat(messages, temperature=0.2, max_tokens=self.cfg.repair_max_tokens)
         return (patch or "").strip()
 
     # ---------------------------
@@ -3376,6 +4808,72 @@ class RefactoringAgent:
         self.sandbox.run(["git", "reset", "--hard", "HEAD"], cwd=self.work_dir)
         self.sandbox.run(["git", "clean", "-fd"], cwd=self.work_dir)
 
+    def _git_head_hash(self) -> str:
+        res = self.sandbox.run(["git", "rev-parse", "HEAD"], cwd=self.work_dir)
+        return (res.stdout or "").strip()
+
+    def _git_reset_clean_to(self, rev: str) -> None:
+        self.sandbox.run(["git", "reset", "--hard", rev], cwd=self.work_dir)
+        self.sandbox.run(["git", "clean", "-fd"], cwd=self.work_dir)
+
+    def _git_commit_checkpoint(self, msg: str) -> None:
+        # Commit current working tree changes. Ignore "nothing to commit".
+        self.sandbox.run(["git", "add", "-A"], cwd=self.work_dir)
+        res = self.sandbox.run(["git", "commit", "-m", msg], cwd=self.work_dir)
+        _ = res  # keep for debugging if needed
+
+    @staticmethod
+    def _is_meta_path(p: str) -> bool:
+        return (
+            p.startswith(".agent_artifacts/")
+            or p == ".agent_artifacts"
+            or p.startswith(".git/")
+            or p == ".git"
+        )
+
+    def _list_changed_files(self) -> List[str]:
+        diff_names = self.sandbox.run(["git", "diff", "--name-only"], cwd=self.work_dir)
+        files = [ln.strip() for ln in (diff_names.stdout or "").splitlines() if ln.strip()]
+        return [f for f in files if not self._is_meta_path(f)]
+
+    def _allowed_files_from_plan(self, plan: Dict[str, Any]) -> List[str]:
+        rel_files: List[str] = []
+        for f in (plan.get("files_to_change") or []):
+            fp = (f.get("file_path") or "").strip()
+            if fp:
+                rel_files.append(fp)
+        # de-dup keep order
+        seen = set()
+        rel_files = [x for x in rel_files if not (x in seen or seen.add(x))]
+        return rel_files
+
+    def _compute_allowed_files(self, plan: Dict[str, Any], context_pack: Dict[str, Any]) -> List[str]:
+        allowed = self._allowed_files_from_plan(plan)
+        for ef in (context_pack.get("expected_files") or []):
+            if isinstance(ef, str) and ef.strip():
+                allowed.append(ef.strip())
+        # de-dup keep order
+        seen: set[str] = set()
+        return [x for x in allowed if not (x in seen or seen.add(x))]
+
+
+    def _enforce_changed_files_whitelist(self, allowed: List[str]) -> Tuple[bool, str]:
+        if not self.cfg.enforce_file_whitelist:
+            return True, ""
+        allowed_set = set(allowed or [])
+        changed = self._list_changed_files()
+        extra = [f for f in changed if f not in allowed_set]
+        if extra:
+            return False, (
+                "[SCOPE ERROR] The patch modified files outside the planned scope.\n"
+                f"Allowed: {sorted(allowed_set)}\n"
+                f"Changed: {changed}\n"
+                f"Out-of-scope: {extra}\n"
+                "Fix by ONLY editing allowed files.\n"
+            )
+        return True, ""
+
+
     def _extract_apply_failure_context(self, stderr: str) -> str:
         """
         If stderr contains 'patch failed: <file>:<line>', append an excerpt of that file around the line.
@@ -3398,7 +4896,58 @@ class RefactoringAgent:
         return f"\n[FILE EXCERPT] {resolved} around line {line_no}\n{excerpt}\n"
 
 
-    # ---------------------------
+    
+    def _hard_requirements_text(self, context_pack: Dict[str, Any]) -> str:
+        """Build strict, machine-checkable constraints to reduce 'guess-the-naming' failure modes."""
+        lines: List[str] = []
+        expected = context_pack.get("expected_files") or []
+        expected = [str(x).strip() for x in expected if str(x).strip()]
+        if expected:
+            lines.append(f"- These files MUST exist at EXACT repo-relative paths after the refactor (do not rename/move):")
+            for p in expected:
+                lines.append(f"  - {p}")
+            lines.append("- Do NOT satisfy expected files by using inner/nested classes; create top-level files at the exact paths.")
+        focus_after = str(context_pack.get("focus_node_after") or "").strip()
+        if focus_after:
+            lines.append(f"- The post-refactor code MUST contain this method id exactly: {focus_after}")
+            lines.append("  - Do not rename the class or method in that id. If you move code, keep this API as an adapter/wrapper.")
+        if not lines:
+            return "- (none)"
+        return "\n".join(lines)
+
+    def _extract_compiler_error_files(self, logs: str) -> List[str]:
+        """Heuristically extract repo-relative file paths from compiler/test logs (javac/maven/gradle)."""
+        if not logs:
+            return []
+        out: List[str] = []
+        # Common patterns:
+        # 1) javac: /abs/path/Foo.java:123: error:
+        # 2) javac: src/main/java/.../Foo.java:123: error:
+        # 3) maven: [ERROR] /abs/path/Foo.java:[123,45] cannot find symbol
+        patterns = [
+            r"(?P<path>(?:[A-Za-z]:)?[^\s:]+?\.java):(?P<line>\d+):\s*error",
+            r"\[ERROR\]\s+(?P<path>(?:[A-Za-z]:)?[^\s:]+?\.java):\[(?P<line>\d+),\d+\]",
+        ]
+        for pat in patterns:
+            for m in re.finditer(pat, logs):
+                p = (m.group("path") or "").strip()
+                if not p:
+                    continue
+                # Normalize to repo-relative if possible
+                p_norm = p.replace("\\", "/")
+                wd = str(self.work_dir).replace("\\", "/").rstrip("/")
+                if p_norm.startswith(wd + "/"):
+                    p_norm = p_norm[len(wd) + 1 :]
+                # Filter build outputs (target/, build/) unless it's in source tree
+                if "/target/" in p_norm or p_norm.startswith("target/") or "/build/" in p_norm or p_norm.startswith("build/"):
+                    # ignore compiled artifacts
+                    continue
+                if p_norm not in out:
+                    out.append(p_norm)
+        return out
+
+
+# ---------------------------
     # Apply LLM edits (Search/Replace Blocks or Full Rewrite)
     # ---------------------------
 
@@ -3734,7 +5283,6 @@ class RefactoringAgent:
         raw_plan = self._plan(request=request, context_pack=context_pack)
         plan = self._normalize_plan_paths(raw_plan, context_pack)
         objective = request
-        # plan["objective_summary"] = plan.get("objective")
 
         tool_info = self._run_tool_requests(plan.get("tool_requests", []) or [])
         (artifacts / "plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -3743,41 +5291,299 @@ class RefactoringAgent:
 
         # Git baseline
         self._ensure_git_baseline(artifacts)
+        baseline_rev = self._git_head_hash()
 
-        prev_patch = ""
-        last_logs = ""
+        # Planned/allowed files (also include expected_files from context_pack if present)
+        allowed_files = self._compute_allowed_files(plan, context_pack)
+
         modified_files: List[str] = []
 
-        for it in range(1, self.cfg.max_iters + 1):
-            # Always reset to baseline between attempts
-            self._git_reset_clean()
+        def collect_modified_files() -> List[str]:
+            # report diff vs baseline commit; exclude agent artifacts
+            res = self.sandbox.run(["git", "diff", "--name-only", baseline_rev, "HEAD"], cwd=self.work_dir)
+            files = [ln.strip() for ln in (res.stdout or "").splitlines() if ln.strip()]
+            return [f for f in files if not self._is_meta_path(f)]
 
-            if it == 1:
-                patch = self._edit(objective=objective, plan=plan, context_pack=context_pack, extra_tool_info=tool_info)
-            else:
-                patch = self._repair(objective=objective, plan=plan, context_pack=context_pack, prev_patch=prev_patch, verify_logs=last_logs, extra_tool_info=tool_info)
+        # ---------------------------
+        # Mode: monolithic (original)
+        # ---------------------------
+        if (self.cfg.execution_mode or "monolithic").lower() in ("monolithic", "one_shot", "oneshot"):
+            prev_patch = ""
+            last_logs = ""
 
-            llm_out_file = artifacts / f"llm_output_{it}.txt"
-            llm_out_file.write_text(patch, encoding="utf-8")
-            diff_file = artifacts / f"patch_attempt_{it}.diff"
-            ok_apply, apply_logs = self._apply_llm_output(patch, diff_file)
-            if not ok_apply:
-                last_logs = apply_logs
-                (artifacts / f"verify_attempt_{it}.txt").write_text(last_logs, encoding="utf-8")
+            for it in range(1, self.cfg.max_iters + 1):
+                # Always reset to baseline between attempts
+                self._git_reset_clean()
+
+                if it == 1:
+                    patch = self._edit(objective=objective, plan=plan, context_pack=context_pack, extra_tool_info=tool_info)
+                else:
+                    patch = self._repair(
+                        objective=objective,
+                        plan=plan,
+                        context_pack=context_pack,
+                        prev_patch=prev_patch,
+                        verify_logs=last_logs,
+                        extra_tool_info=tool_info,
+                    )
+
+                llm_out_file = artifacts / f"llm_output_{it}.txt"
+                llm_out_file.write_text(patch, encoding="utf-8")
+                diff_file = artifacts / f"patch_attempt_{it}.diff"
+                ok_apply, apply_logs = self._apply_llm_output(patch, diff_file)
+                (artifacts / f"apply_attempt_{it}.txt").write_text(apply_logs, encoding="utf-8")
+                if not ok_apply:
+                    last_logs = apply_logs
+                    prev_patch = patch
+                    continue
+
+                ok_scope, scope_logs = self._enforce_changed_files_whitelist(
+    self._compute_allowed_files(step_plan, context_pack)
+)
+
+                if not ok_scope:
+                    (artifacts / f"scope_step{si}_attempt{it}.txt").write_text(scope_logs, encoding="utf-8")
+
+                    # 解析 out-of-scope
+                    m = re.search(r"Out-of-scope:\s*\[(.*?)\]", scope_logs, flags=re.DOTALL)
+                    oos_paths = re.findall(r"'([^']+)'", m.group(0)) if m else []
+
+                    found_set = set((context_pack or {}).get("found_files") or [])
+                    candidates = []
+                    for p in oos_paths:
+                        p = (p or "").strip()
+                        if not p:
+                            continue
+                        # ✅ 建议用 work_dir 判断是否存在（而不是 project_dir）
+                        if (p in found_set) or (self._is_safe_repo_path(p) and (self.work_dir / p).exists()):
+                            candidates.append(p)
+
+                    candidates = list(dict.fromkeys(candidates))
+                    if candidates:
+                        scope_expanded_files = list(dict.fromkeys(scope_expanded_files + candidates))
+                        allowed_union = list(dict.fromkeys((files_in_step or []) + scope_expanded_files))
+                        step_plan["files_to_change"] = [{"file_path": p} for p in allowed_union]
+
+                        # ✅ 关键：扩容后立刻复查 scope（不要直接 continue）
+                        ok2, scope_logs2 = self._enforce_changed_files_whitelist(
+                            self._compute_allowed_files(step_plan, context_pack)
+                        )
+                        if ok2:
+                            (artifacts / f"scope_step{si}_attempt{it}_expanded.txt").write_text(
+                                scope_logs + "\n\n[ALLOWLIST EXPANDED]\n" + scope_logs2,
+                                encoding="utf-8",
+                            )
+                            # ✅ 继续往下走 verify/commit
+                        else:
+                            step_last_logs = scope_logs2
+                            step_prev_patch = patch
+                            continue
+                    else:
+                        step_last_logs = scope_logs
+                        step_prev_patch = patch
+                        continue
+
+
+                verify_ok, verify_logs = self._verify(plan)
+                (artifacts / f"verify_attempt_{it}.txt").write_text(verify_logs, encoding="utf-8")
+
+                if verify_ok:
+                    modified_files = collect_modified_files()
+                    summary = {
+                        "status": "success",
+                        "attempts": it,
+                        "work_dir": str(run_dir),
+                        "artifacts_dir": str(artifacts),
+                        "modified_files": modified_files,
+                        "objective": objective,
+                    }
+                    (artifacts / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+                    return summary
+
+                last_logs = verify_logs
                 prev_patch = patch
-                continue
 
-            verify_ok, verify_logs = self._verify(plan)
-            (artifacts / f"verify_attempt_{it}.txt").write_text(verify_logs, encoding="utf-8")
+            summary = {
+                "status": "failed",
+                "attempts": self.cfg.max_iters,
+                "work_dir": str(run_dir),
+                "artifacts_dir": str(artifacts),
+                "modified_files": modified_files,
+                "objective": objective,
+            }
+            (artifacts / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+            return summary
 
-            if verify_ok:
-                # Collect modified files for reporting
-                diff_names = self.sandbox.run(["git", "diff", "--name-only"], cwd=self.work_dir)
-                modified_files = [ln.strip() for ln in diff_names.stdout.splitlines() if ln.strip()]
+        # ---------------------------
+        # Mode: stepwise (recommended)
+        # ---------------------------
+        # Build steps: use plan steps if provided, else split files_to_change into small chunks.
+        step_files: List[str] = []
+        for f in (plan.get("files_to_change") or []):
+            fp = (f.get("file_path") or "").strip()
+            if fp:
+                step_files.append(fp)
+        if not step_files:
+            focus_fp = self._focus_file_from_context_pack(context_pack)
+            if focus_fp:
+                step_files.append(focus_fp)
 
+        # Keep a stable "global" allowlist from the original plan (avoid chunking-induced scope errors)
+        global_plan_files = list(dict.fromkeys(step_files))
+
+
+        # chunk by step_max_files
+        chunk = max(1, int(self.cfg.step_max_files or 1))
+        steps: List[List[str]] = [step_files[i:i+chunk] for i in range(0, len(step_files), chunk)]
+        if not steps:
+            steps = [[]]
+
+        for si, files_in_step in enumerate(steps, start=1):
+            step_start_rev = self._git_head_hash()
+            step_prev_patch = ""
+            step_last_logs = ""
+            scope_expanded_files: List[str] = []
+
+            step_objective = objective
+            if files_in_step:
+                step_objective += f"\n\n[STEP {si}/{len(steps)}] Primary edit targets: {', '.join(files_in_step)}"
+            else:
+                step_objective += f"\n\n[STEP {si}/{len(steps)}]"
+
+            step_plan = dict(plan)
+
+            # Allow edits to: global plan files ∪ current step primary targets ∪ (scope-expanded files)
+            allowed_union = list(dict.fromkeys((files_in_step or []) + scope_expanded_files))
+            if allowed_union:
+                step_plan["files_to_change"] = [{"file_path": p} for p in allowed_union]
+
+
+            for it in range(1, self.cfg.max_iters + 1):
+                # Reset to start of this step (NOT to baseline) so we can accumulate progress.
+                self._git_reset_clean_to(step_start_rev)
+
+                if it == 1:
+                    patch = self._edit(
+                        objective=step_objective,
+                        plan=step_plan,
+                        context_pack=context_pack,
+                        extra_tool_info=tool_info,
+                        only_files=allowed_union,
+                    )
+                else:
+                    patch = self._repair(
+                        objective=step_objective,
+                        plan=step_plan,
+                        context_pack=context_pack,
+                        prev_patch=step_prev_patch,
+                        verify_logs=step_last_logs,
+                        extra_tool_info=tool_info,
+                        only_files=allowed_union,
+                    )
+
+                llm_out_file = artifacts / f"llm_output_step{si}_attempt{it}.txt"
+                llm_out_file.write_text(patch, encoding="utf-8")
+                diff_file = artifacts / f"patch_step{si}_attempt{it}.diff"
+
+                ok_apply, apply_logs = self._apply_llm_output(patch, diff_file)
+                (artifacts / f"apply_step{si}_attempt{it}.txt").write_text(apply_logs, encoding="utf-8")
+                if not ok_apply:
+                    # If apply failed because SEARCH block didn't match, it often means the model
+                    # did not have the authoritative file contents (e.g., missed Javadoc/comments).
+                    # Extract the file path(s) and include them in the next prompt + allowlist.
+                    missing = self._extract_apply_search_mismatch_files(apply_logs)
+                    expanded: List[str] = []
+                    for p in missing:
+                        if self._is_safe_repo_path(p) and (self.work_dir / p).exists():
+                            expanded.append(p)
+
+                    if expanded:
+                        scope_expanded_files = list(dict.fromkeys(scope_expanded_files + expanded))
+                        allowed_union = list(dict.fromkeys((files_in_step or []) + scope_expanded_files))
+                        step_plan["files_to_change"] = [{"file_path": p} for p in allowed_union]
+
+                    step_last_logs = apply_logs
+                    step_prev_patch = patch
+                    continue
+
+                ok_scope, scope_logs = self._enforce_changed_files_whitelist(
+    self._compute_allowed_files(step_plan, context_pack)
+)
+
+                if not ok_scope:
+                    (artifacts / f"scope_step{si}_attempt{it}.txt").write_text(scope_logs, encoding="utf-8")
+
+                    # 解析 out-of-scope
+                    m = re.search(r"Out-of-scope:\s*\[(.*?)\]", scope_logs, flags=re.DOTALL)
+                    oos_paths = re.findall(r"'([^']+)'", m.group(0)) if m else []
+
+                    found_set = set((context_pack or {}).get("found_files") or [])
+                    candidates = []
+                    for p in oos_paths:
+                        p = (p or "").strip()
+                        if not p:
+                            continue
+                        # ✅ 建议用 work_dir 判断是否存在（而不是 project_dir）
+                        if (p in found_set) or (self._is_safe_repo_path(p) and (self.work_dir / p).exists()):
+                            candidates.append(p)
+
+                    candidates = list(dict.fromkeys(candidates))
+                    if candidates:
+                        scope_expanded_files = list(dict.fromkeys(scope_expanded_files + candidates))
+                        allowed_union = list(dict.fromkeys((files_in_step or []) + scope_expanded_files))
+                        step_plan["files_to_change"] = [{"file_path": p} for p in allowed_union]
+
+                        # ✅ 关键：扩容后立刻复查 scope（不要直接 continue）
+                        ok2, scope_logs2 = self._enforce_changed_files_whitelist(
+                            self._compute_allowed_files(step_plan, context_pack)
+                        )
+                        if ok2:
+                            (artifacts / f"scope_step{si}_attempt{it}_expanded.txt").write_text(
+                                scope_logs + "\n\n[ALLOWLIST EXPANDED]\n" + scope_logs2,
+                                encoding="utf-8",
+                            )
+                            # ✅ 继续往下走 verify/commit
+                        else:
+                            step_last_logs = scope_logs2
+                            step_prev_patch = patch
+                            continue
+                    else:
+                        step_last_logs = scope_logs
+                        step_prev_patch = patch
+                        continue
+
+
+                if self.cfg.verify_each_step:
+                    verify_ok, verify_logs = self._verify(step_plan)
+                    (artifacts / f"verify_step{si}_attempt{it}.txt").write_text(verify_logs, encoding="utf-8")
+                    if not verify_ok:
+                        # Error-driven scope expansion: when compilation/test fails due to missing symbols,
+                        # automatically include the referenced files in the next iteration's edit scope and
+                        # dump their full contents to the model (to avoid API skew across files).
+                        extra_files = [p for p in self._extract_compiler_error_files(verify_logs) if self._is_safe_repo_path(p) and (self.work_dir / p).exists()]
+                        if extra_files:
+                            cur_files = [str(x.get("file_path") or "").strip() for x in (step_plan.get("files_to_change") or []) if str(x.get("file_path") or "").strip()]
+                            merged = cur_files + [p for p in extra_files if p not in cur_files]
+                            step_plan["files_to_change"] = [{"file_path": p} for p in merged]
+                            step_objective += "\n\n[ERROR-DRIVEN SCOPE EXPANSION] Verification failed. You may (and likely must) also edit: " + ", ".join(extra_files)
+                        step_last_logs = verify_logs
+                        step_prev_patch = patch
+                        continue
+
+                # Step success: checkpoint commit
+                try:
+                    self._git_commit_checkpoint(f"step {si}")
+                except Exception:
+                    # ignore if nothing to commit
+                    pass
+                modified_files = collect_modified_files()
+                break
+            else:
+                # step failed
                 summary = {
-                    "status": "success",
-                    "attempts": it,
+                    "status": "failed",
+                    "attempts": self.cfg.max_iters,
+                    "failed_step": si,
                     "work_dir": str(run_dir),
                     "artifacts_dir": str(artifacts),
                     "modified_files": modified_files,
@@ -3786,12 +5592,25 @@ class RefactoringAgent:
                 (artifacts / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
                 return summary
 
-            last_logs = verify_logs
-            prev_patch = patch
+        # Final verification (even if verify_each_step=False, do it once at the end)
+        final_ok, final_logs = self._verify(plan)
+        (artifacts / "verify_final.txt").write_text(final_logs, encoding="utf-8")
+        if final_ok:
+            modified_files = collect_modified_files()
+            summary = {
+                "status": "success",
+                "attempts": len(steps),
+                "work_dir": str(run_dir),
+                "artifacts_dir": str(artifacts),
+                "modified_files": modified_files,
+                "objective": objective,
+            }
+            (artifacts / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
+            return summary
 
         summary = {
             "status": "failed",
-            "attempts": self.cfg.max_iters,
+            "attempts": len(steps),
             "work_dir": str(run_dir),
             "artifacts_dir": str(artifacts),
             "modified_files": modified_files,
@@ -3810,1410 +5629,11 @@ def _format_cmd_result(res: CommandResult) -> str:
         f"[STDERR]\n{res.stderr}\n"
     )
 
-==================== END FILE ====================
-
-
-==================== FILE: src/context_engine.py ====================
-"""
-Graph-RAG Context Engine
-
-Goal:
-- Given a natural language query, first do vector search over graph nodes to find seed(s).
-- Then expand the graph neighborhood (k-hop + rule-based expansion).
-- Finally output a structured "Context Pack" (like IDE refactoring preview).
-
-This is the *bridge* between your graph builder and the future refactoring agent.
-"""
-from __future__ import annotations
-
-from collections import defaultdict, deque
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Set, Tuple
-
-import networkx as nx
-
-from .utils import load_snippet
-from .vector_index import NodeVectorIndex, ScoredNode
-
-
-@dataclass
-class ContextNode:
-    node_id: str
-    name: str
-    type: str
-    file_path: str
-    start_line: int
-    end_line: int
-    signature: str
-    docstring: str
-    snippet: str
-    role: str
-    roles: List[str]
-    highlight_span: Optional[Dict[str, int]]
-    why: List[str]
-
-
-class GraphRAGContextEngine:
-    def __init__(
-        self,
-        graph: nx.DiGraph,
-        vector_index: NodeVectorIndex,
-        *,
-        max_snippet_lines: int = 120,
-    ) -> None:
-        self.graph = graph
-        self.vindex = vector_index
-        self.max_snippet_lines = max_snippet_lines
-
-        # Precompute helper indexes for rule-based expansion
-        self.class_to_members: Dict[str, Set[str]] = defaultdict(set)
-        self.file_to_nodes: Dict[str, Set[str]] = defaultdict(set)
-        self.field_to_methods: Dict[str, Set[str]] = defaultdict(set)
-
-        self._build_aux_indexes()
-
-    def _build_aux_indexes(self) -> None:
-        # class_to_members + file_to_nodes
-        for nid, attrs in self.graph.nodes(data=True):
-            cls = attrs.get("class") or (nid if attrs.get("type") == "Class" else None)
-            if cls:
-                self.class_to_members[str(cls)].add(nid)
-            fp = attrs.get("file_path")
-            if fp:
-                self.file_to_nodes[str(fp)].add(nid)
-
-        # field_to_methods via READS/WRITES edges
-        for u, v, attrs in self.graph.edges(data=True):
-            rel = attrs.get("relation") or attrs.get("type")
-            if rel in ("READS", "WRITES"):
-                # v should be a field node (or unresolved)
-                self.field_to_methods[str(v)].add(str(u))
-
-    # -------------------------
-    # Public API
-    # -------------------------
-    def query(
-        self,
-        query: str,
-        *,
-        seed_top_k: int = 5,
-        hops: int = 2,
-        max_nodes: int = 30,
-        same_class_limit: int = 8,
-        same_file_limit: int = 8,
-        shared_field_limit: int = 10,
-    ) -> Dict:
-        """
-        Return a structured context pack.
-
-        Parameters:
-        - query: natural language or a node_id (if exact match)
-        """
-        seeds = self._select_seeds(query, seed_top_k=seed_top_k)
-
-        selected: Set[str] = set()
-        reasons: Dict[str, List[str]] = defaultdict(list)
-        roles: Dict[str, Set[str]] = defaultdict(set)
-
-        def add(nid: str, why: str, role: Optional[str] = None) -> None:
-            if not nid:
-                return
-            if nid not in selected:
-                selected.add(nid)
-            if why and why not in reasons[nid]:
-                reasons[nid].append(why)
-            if role:
-                roles[nid].add(role)
-
-        # If query is an exact node id, mark it as focus; otherwise take top seed.
-        focus_node_id = query if query in self.graph else (seeds[0].node_id if seeds else "")
-
-        # Always include focus (even when it is not selected by seeds for some reason).
-        if focus_node_id:
-            add(focus_node_id, "focus node", role="focus")
-
-        # 1) add seed nodes
-        for s in seeds:
-            add(s.node_id, f"seed via vector search (score={s.score:.3f})", role="seed")
-
-        # 2) call graph expansion: separate callees vs callers (IDE-like preview)
-        callees = self._expand_relation_dir([focus_node_id], relation="CALLS", hops=hops, direction="out")
-        callers = self._expand_relation_dir([focus_node_id], relation="CALLS", hops=hops, direction="in")
-        for nid, depth in callees.items():
-            add(nid, f"call-graph neighbor (CALLEE, depth={depth})", role="callee")
-        for nid, depth in callers.items():
-            add(nid, f"call-graph neighbor (CALLER, depth={depth})", role="caller")
-
-        # 3) same-class members (siblings of focus)
-        focus_cls = self.graph.nodes[focus_node_id].get("class") if focus_node_id in self.graph else None
-        if focus_cls:
-            members = list(self.class_to_members.get(str(focus_cls), set()))
-            members = [m for m in members if self.graph.nodes[m].get("type") != "Class"]
-            # Keep bounded
-            for m in members[:same_class_limit]:
-                add(m, f"same class member of {focus_cls}", role="same_class_member")
-
-        # 4) shared field access: focus method -> field -> other methods (READS/WRITES separated)
-        read_fields: Set[str] = set()
-        written_fields: Set[str] = set()
-        if focus_node_id:
-            for _, v, attrs in self.graph.out_edges(focus_node_id, data=True):
-                rel = attrs.get("relation") or attrs.get("type")
-                if rel == "READS":
-                    read_fields.add(str(v))
-                elif rel == "WRITES":
-                    written_fields.add(str(v))
-
-        touched_fields = list(read_fields | written_fields)
-        for f in touched_fields[:shared_field_limit]:
-            add(f, "shared state (field accessed by focus)", role="shared_field")
-            # Identify readers/writers of that field
-            for u, _, attrs in self.graph.in_edges(f, data=True):
-                rel = attrs.get("relation") or attrs.get("type")
-                if rel == "READS":
-                    add(u, f"shares field {f} (READS)", role="shared_field_reader")
-                elif rel == "WRITES":
-                    add(u, f"shares field {f} (WRITES)", role="shared_field_writer")
-
-        # 5) same-file helpers: nodes in same file as focus (bounded)
-        fp = self.graph.nodes[focus_node_id].get("file_path") if focus_node_id in self.graph else None
-        if fp:
-            nodes = list(self.file_to_nodes.get(str(fp), set()))
-            nodes.sort(key=lambda nid: 0 if self.graph.nodes[nid].get("type") in ("Method", "Field") else 1)
-            for nid in nodes[:same_file_limit]:
-                add(nid, f"same file helper ({fp})", role="same_file_helper")
-
-        # Enforce max_nodes budget
-        if len(selected) > max_nodes:
-            # Keep focus + seeds first, then by number of roles/reasons.
-            seed_ids = [s.node_id for s in seeds]
-            keep: List[str] = []
-            if focus_node_id and focus_node_id in selected:
-                keep.append(focus_node_id)
-            for nid in seed_ids:
-                if nid in selected and nid not in keep:
-                    keep.append(nid)
-            remaining = [nid for nid in selected if nid not in keep]
-            remaining.sort(
-                key=lambda nid: (len(roles.get(nid, set())), len(reasons.get(nid, []))),
-                reverse=True,
-            )
-            keep.extend(remaining[: max_nodes - len(keep)])
-            selected = set(keep)
-
-        # Build node payloads (stable ordering like an IDE preview)
-        nodes_payload = [
-            self._build_context_node(
-                nid,
-                reasons[nid],
-                roles=sorted(list(roles.get(nid, set()))),
-                focus_id=focus_node_id,
-            )
-            for nid in selected
-        ]
-
-        # Sort nodes by role priority
-        role_priority = {
-            "focus": 0,
-            "seed": 1,
-            "callee": 2,
-            "caller": 2,
-            "shared_field_writer": 3,
-            "shared_field_reader": 4,
-            "shared_field": 5,
-            "same_class_member": 6,
-            "same_file_helper": 7,
-        }
-
-        def _node_sort_key(n: Dict) -> Tuple[int, str]:
-            rls = n.get("roles") or []
-            pri = min([role_priority.get(r, 99) for r in rls] or [99])
-            return pri, str(n.get("node_id"))
-
-        nodes_payload = sorted([node.__dict__ for node in nodes_payload], key=_node_sort_key)
-
-        # Collect edges among selected nodes for explainability
-        edges_payload = []
-        for u, v, attrs in self.graph.edges(data=True):
-            if u in selected and v in selected:
-                edges_payload.append({
-                    "source": u,
-                    "target": v,
-                    "relation": attrs.get("relation") or attrs.get("type"),
-                    "file_path": attrs.get("file_path"),
-                    "line": attrs.get("line"),
-                })
-
-        # IDE-style grouped views
-        call_graph_view = {
-            "callees": [{"node_id": nid, "depth": d} for nid, d in sorted(callees.items(), key=lambda kv: kv[1]) if nid in selected],
-            "callers": [{"node_id": nid, "depth": d} for nid, d in sorted(callers.items(), key=lambda kv: kv[1]) if nid in selected],
-        }
-
-        # For IDE preview, keep fields separated by access type
-        data_flow_view = {
-            "read_fields": [fid for fid in sorted(read_fields) if fid in selected],
-            "written_fields": [fid for fid in sorted(written_fields) if fid in selected],
-        }
-
-        same_class_view: List[str] = []
-        if focus_cls:
-            same_class_view = sorted([nid for nid in list(self.class_to_members.get(str(focus_cls), set())) if nid in selected])
-
-        same_file_view: List[str] = []
-        if fp:
-            same_file_view = sorted([nid for nid in list(self.file_to_nodes.get(str(fp), set())) if nid in selected])
-
-        return {
-            "query": query,
-            "focus_node": focus_node_id,
-            "seed_nodes": [{"node_id": s.node_id, "score": s.score} for s in seeds],
-            "nodes": nodes_payload,
-            "edges": edges_payload,
-            # New: IDE preview sub-views
-            "focus": {"node_id": focus_node_id},
-            "call_graph": call_graph_view,
-            "data_flow": data_flow_view,
-            "same_class": same_class_view,
-            "same_file": same_file_view,
-            "stats": {
-                "seed_top_k": seed_top_k,
-                "hops": hops,
-                "selected_nodes": len(nodes_payload),
-                "selected_edges": len(edges_payload),
-            },
-        }
-
-    # -------------------------
-    # Seed selection
-    # -------------------------
-    def _select_seeds(self, query: str, seed_top_k: int) -> List[ScoredNode]:
-        if query in self.graph:
-            return [ScoredNode(node_id=query, score=1.0)]
-        return self.vindex.search(query, top_k=seed_top_k, min_score=0.0)
-
-    # -------------------------
-    # Graph expansion helpers
-    # -------------------------
-    def _expand_relation_dir(self, start_nodes: List[str], relation: str, hops: int, direction: str) -> Dict[str, int]:
-        """Direction-aware BFS expansion.
-
-        direction:
-          - "out": follow out_edges (caller -> callee)
-          - "in":  follow in_edges  (callee <- caller)
-        Returns: node_id -> min depth (>=1)
-        """
-        if not start_nodes or not any(bool(s) for s in start_nodes):
-            return {}
-        depth_map: Dict[str, int] = {}
-        q: deque[Tuple[str, int]] = deque()
-        visited: Set[str] = set()
-
-        for s in start_nodes:
-            if not s:
-                continue
-            q.append((s, 0))
-            visited.add(s)
-
-        while q:
-            nid, d = q.popleft()
-            if d >= hops:
-                continue
-
-            if direction == "out":
-                edges = self.graph.out_edges(nid, data=True)
-                for _, v, attrs in edges:
-                    rel = attrs.get("relation") or attrs.get("type")
-                    if rel != relation:
-                        continue
-                    if v not in visited:
-                        visited.add(v)
-                        depth_map[str(v)] = min(depth_map.get(str(v), 10**9), d + 1)
-                        q.append((v, d + 1))
-            else:
-                edges = self.graph.in_edges(nid, data=True)
-                for u, _, attrs in edges:
-                    rel = attrs.get("relation") or attrs.get("type")
-                    if rel != relation:
-                        continue
-                    if u not in visited:
-                        visited.add(u)
-                        depth_map[str(u)] = min(depth_map.get(str(u), 10**9), d + 1)
-                        q.append((u, d + 1))
-
-        for s in start_nodes:
-            depth_map.pop(s, None)
-        return depth_map
-
-    def _expand_relation(self, seeds: List[str], relation: str, hops: int) -> Dict[str, int]:
-        """
-        Expand by following edges (both directions) that match `relation` up to `hops`.
-        Returns: node_id -> min depth
-        """
-        depth_map: Dict[str, int] = {}
-        q: deque[Tuple[str, int]] = deque()
-        visited: Set[str] = set()
-
-        for s in seeds:
-            q.append((s, 0))
-            visited.add(s)
-
-        while q:
-            nid, d = q.popleft()
-            if d >= hops:
-                continue
-
-            # out edges
-            for _, v, attrs in self.graph.out_edges(nid, data=True):
-                rel = attrs.get("relation") or attrs.get("type")
-                if rel != relation:
-                    continue
-                if v not in visited:
-                    visited.add(v)
-                    depth_map[str(v)] = min(depth_map.get(str(v), 10**9), d + 1)
-                    q.append((v, d + 1))
-
-            # in edges
-            for u, _, attrs in self.graph.in_edges(nid, data=True):
-                rel = attrs.get("relation") or attrs.get("type")
-                if rel != relation:
-                    continue
-                if u not in visited:
-                    visited.add(u)
-                    depth_map[str(u)] = min(depth_map.get(str(u), 10**9), d + 1)
-                    q.append((u, d + 1))
-
-        # Remove seeds
-        for s in seeds:
-            depth_map.pop(s, None)
-        return depth_map
-
-    # -------------------------
-    # Node payload
-    # -------------------------
-    def _build_context_node(
-        self,
-        node_id: str,
-        why: List[str],
-        *,
-        roles: List[str],
-        focus_id: str,
-    ) -> ContextNode:
-        """Build a traceable, IDE-like node payload.
-
-        roles: all roles assigned during selection.
-        focus_id: focus node id (used for ...)
-        """
-        attrs = self.graph.nodes[node_id]
-        ntype = str(attrs.get("type", "Unknown"))
-        name = str(attrs.get("name") or node_id)
-        fp = str(attrs.get("file_path", "") or "")
-        start_line = int(attrs.get("start_line", 0) or 0)
-        end_line = int(attrs.get("end_line", 0) or 0)
-        signature = str(attrs.get("signature", "") or "")
-        docstring = str(attrs.get("docstring", "") or "")
-
-        snippet = ""
-        if fp and start_line and end_line:
-            snippet = load_snippet(fp, start_line, end_line, max_lines=self.max_snippet_lines)
-
-        # Primary role (for UI / sorting) based on a simple priority.
-        role_priority = {
-            "focus": 0,
-            "seed": 1,
-            "callee": 2,
-            "caller": 2,
-            "shared_field_writer": 3,
-            "shared_field_reader": 4,
-            "shared_field": 5,
-            "same_class_member": 6,
-            "same_file_helper": 7,
-        }
-        primary_role = "other"
-        if node_id == focus_id and "focus" not in roles:
-            roles = ["focus"] + roles
-        if roles:
-            primary_role = sorted(roles, key=lambda r: role_priority.get(r, 99))[0]
-
-        # Highlight span (approx): find the first occurrence of the symbol name in the snippet.
-        highlight_span: Optional[Dict[str, int]] = None
-        token = str(attrs.get("name") or "")
-        if snippet and token and start_line:
-            for idx, line in enumerate(snippet.splitlines()):
-                if token in line:
-                    highlight_span = {"start_line": start_line + idx, "end_line": start_line + idx}
-                    break
-        if highlight_span is None and fp and start_line:
-            highlight_span = {"start_line": start_line, "end_line": start_line}
-
-        return ContextNode(
-            node_id=node_id,
-            name=name,
-            type=ntype,
-            file_path=fp,
-            start_line=start_line,
-            end_line=end_line,
-            signature=signature,
-            docstring=docstring,
-            snippet=snippet,
-            role=primary_role,
-            roles=roles,
-            highlight_span=highlight_span,
-            why=why,
-        )
 
 ==================== END FILE ====================
 
 
-==================== FILE: src/graph_builder.py ====================
-"""
-Build a NetworkX code knowledge graph with traceable nodes.
-
-The graph is designed for two purposes:
-1) Visualization (optional)
-2) Retrieval-time neighborhood expansion (Graph-RAG)
-"""
-from __future__ import annotations
-
-from typing import Dict, Iterable, List, Optional, Tuple
-
-import networkx as nx
-
-
-class CodeGraphBuilder:
-    def __init__(self) -> None:
-        self.graph = nx.DiGraph()
-
-    def build_from_parsed_data(self, data: Dict) -> None:
-        """
-        Data format is produced by src.parser.JavaCodeParser.parse_project().
-        """
-        classes = data.get("classes", [])
-        methods = data.get("methods", [])
-        fields = data.get("fields", [])
-        relationships = data.get("relationships", [])
-
-        print(
-            f"📊 [GraphBuilder] classes={len(classes)} methods={len(methods)} fields={len(fields)} rels={len(relationships)}"
-        )
-
-        # 1) Add class nodes
-        for cls in classes:
-            node_id = cls["id"]
-            self.graph.add_node(
-                node_id,
-                **cls,
-            )
-
-        # 2) Add field nodes (+ membership edges)
-        for fld in fields:
-            node_id = fld["id"]
-            self.graph.add_node(node_id, **fld)
-            class_id = fld.get("class")
-            if class_id:
-                self.graph.add_edge(class_id, node_id, relation="CONTAINS", type="CONTAINS")
-
-        # 3) Add method nodes (+ membership edges)
-        for m in methods:
-            node_id = m["id"]
-            self.graph.add_node(node_id, **m)
-            class_id = m.get("class")
-            if class_id:
-                self.graph.add_edge(class_id, node_id, relation="CONTAINS", type="CONTAINS")
-
-        # Helper: normalize relationship targets.
-        # We preserve explicit namespaces produced by the parser:
-        #   - EXTERNAL::...
-        #   - UNRESOLVED::...
-        #   - UNRESOLVED_FIELD::...
-        # so we don't double-prefix them.
-        def _normalize_target_id(source_id: str, target_raw: str) -> str:
-            if target_raw in self.graph:
-                return target_raw
-            if target_raw.startswith(("EXTERNAL::", "UNRESOLVED::", "UNRESOLVED_FIELD::")):
-                return target_raw
-            # If target looks like a fully qualified id and doesn't exist, keep it anyway.
-            if "." in target_raw and "::" not in target_raw:
-                return target_raw
-            return f"UNRESOLVED::{target_raw}"
-
-        # 4) Add relationship edges
-        for rel in relationships:
-            src = rel["source"]
-            tgt_raw = rel["target"]
-            rel_type = rel["type"]
-
-            if src not in self.graph:
-                # Create minimal node for source if missing
-                self.graph.add_node(src, id=src, type="Unknown", name=src)
-
-            tgt = _normalize_target_id(src, tgt_raw)
-            if tgt not in self.graph:
-                # Create minimal node for unresolved/external targets
-                node_type = "Unresolved"
-                display_name = tgt_raw
-                if tgt.startswith("EXTERNAL::"):
-                    node_type = "External"
-                    display_name = tgt.split("::", 1)[1]
-                elif tgt.startswith("UNRESOLVED_FIELD::"):
-                    node_type = "Unresolved"
-                    display_name = tgt.split("::", 1)[1]
-                elif tgt.startswith("UNRESOLVED::"):
-                    node_type = "Unresolved"
-                    display_name = tgt.split("::", 1)[1]
-
-                self.graph.add_node(tgt, id=tgt, type=node_type, name=display_name)
-
-            self.graph.add_edge(
-                src,
-                tgt,
-                relation=rel_type,
-                type=rel_type,
-                file_path=rel.get("file_path"),
-                line=rel.get("line"),
-            )
-
-    def get_graph(self) -> nx.DiGraph:
-        return self.graph
-
-    # Optional: visualize graph (requires pyvis)
-    def visualize(self, output_file: str = "code_graph.html") -> None:
-        try:
-            from pyvis.network import Network  # type: ignore
-        except Exception as e:
-            raise ImportError(
-                "pyvis is required for visualization. Install with: pip install pyvis"
-            ) from e
-
-        net = Network(height="900px", width="100%", directed=True)
-
-        # Add nodes with lightweight styling based on type
-        for node_id, attrs in self.graph.nodes(data=True):
-            ntype = attrs.get("type", "Unknown")
-            title_parts = [f"{ntype}: {node_id}"]
-            for k in ("file_path", "start_line", "end_line", "signature"):
-                if attrs.get(k):
-                    title_parts.append(f"{k}: {attrs.get(k)}")
-            title = "\n".join(title_parts)
-
-            color = "#CCCCCC"
-            shape = "dot"
-            if ntype == "Class":
-                color = "#FF9999"
-                shape = "box"
-            elif ntype == "Method":
-                color = "#99CCFF"
-                shape = "ellipse"
-            elif ntype == "Field":
-                color = "#90EE90"
-                shape = "dot"
-
-            net.add_node(node_id, label=attrs.get("name", node_id), title=title, color=color, shape=shape)
-
-        for u, v, attrs in self.graph.edges(data=True):
-            rel = attrs.get("relation", "")
-            net.add_edge(u, v, label=rel, title=rel, arrows="to")
-
-        net.show(output_file)
-        print(f"🖼️ [Visualizer] saved: {output_file}")
-
-==================== END FILE ====================
-
-
-==================== FILE: src/agent/__init__.py ====================
-
-==================== END FILE ====================
-
-
-==================== FILE: src/agent/llm.py ====================
-from __future__ import annotations
-
-import json
-import os
-import time
-import urllib.request
-import urllib.error
-from dataclasses import dataclass
-from ..dotenv import auto_load_dotenv
-from typing import Any, Dict, List, Optional, Protocol, Tuple
-
-
-class LLMClient(Protocol):
-    def chat(self, messages: List[Dict[str, str]], *, temperature: float = 0.2, max_tokens: int = 1800) -> str:
-        ...
-
-
-@dataclass
-class OpenAICompatibleConfig:
-    """
-    A minimal OpenAI-compatible Chat Completions config.
-
-    Works with:
-      - OpenAI (if /v1/chat/completions is enabled)
-      - Many self-hosted servers (vLLM / LM Studio / OpenRouter-like gateways) that expose OpenAI-style endpoints.
-    """
-    base_url: str = "https://api.openai.com"
-    api_key: Optional[str] = None
-    model: str = "gpt-4.1-mini"
-    timeout_s: int = 120
-    max_retries: int = 2
-    retry_backoff_s: float = 1.5
-    # If True, do not verify TLS certs (NOT recommended). Kept for corporate proxies edge cases.
-    insecure_skip_verify: bool = False
-
-
-class OpenAICompatibleChatClient:
-    def __init__(self, cfg: OpenAICompatibleConfig):
-        self.cfg = cfg
-        if not self.cfg.api_key:
-            # Try loading from a local .env file (common in research demos).
-            auto_load_dotenv(os.environ.get("REFAC_DOTENV") or os.environ.get("DOTENV_PATH"))
-            self.cfg.api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_APIKEY")
-
-    def chat(self, messages: List[Dict[str, str]], *, temperature: float = 0.2, max_tokens: int = 1800) -> str:
-        if not self.cfg.api_key:
-            raise RuntimeError(
-                "Missing API key. Set OpenAICompatibleConfig.api_key or environment variable OPENAI_API_KEY."
-            )
-        url = self.cfg.base_url.rstrip("/") + "/v1/chat/completions"
-
-        payload = {
-            "model": self.cfg.model,
-            "messages": messages,
-            "temperature": float(temperature),
-            "max_tokens": int(max_tokens),
-        }
-        data = json.dumps(payload).encode("utf-8")
-
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.cfg.api_key}",
-        }
-
-        last_err: Optional[Exception] = None
-        for attempt in range(self.cfg.max_retries + 1):
-            try:
-                req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-                ctx = None
-                if self.cfg.insecure_skip_verify:
-                    import ssl
-                    ctx = ssl._create_unverified_context()
-                with urllib.request.urlopen(req, timeout=self.cfg.timeout_s, context=ctx) as resp:
-                    raw = resp.read().decode("utf-8", errors="replace")
-                obj = json.loads(raw)
-                # OpenAI-style response: choices[0].message.content
-                return obj["choices"][0]["message"]["content"]
-            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, KeyError) as e:
-                last_err = e
-                if attempt >= self.cfg.max_retries:
-                    break
-                time.sleep(self.cfg.retry_backoff_s * (attempt + 1))
-        raise RuntimeError(f"LLM request failed after retries: {last_err}") from last_err
-
-
-class DummyEchoLLM:
-    """
-    For dry-runs without an API key.
-
-    This dummy client tries to be *structurally compatible* with the agent:
-      - For planning prompts that require STRICT JSON, it returns a minimal valid plan.
-      - For edit/repair prompts, it returns a harmless "create a new file" rewrite
-        so the patch parser/apply step succeeds and verification can run.
-
-    IMPORTANT: This does NOT attempt to accomplish the user's refactoring request.
-    """
-    def chat(self, messages: List[Dict[str, str]], *, temperature: float = 0.2, max_tokens: int = 1800) -> str:
-        system = ""
-        for m in messages:
-            if m.get("role") == "system":
-                system = str(m.get("content") or "")
-                break
-
-        # 1) Plan stage: must be valid JSON
-        if "Return STRICT JSON" in system and "refactoring plan" in system.lower():
-            plan = {
-                "objective": "DRY RUN (no-op)",
-                "assumptions": ["This is a dry run using DummyEchoLLM."],
-                "steps": ["Do not change code."],
-                "files_to_change": [],
-                "verification": [],
-                "tool_requests": [],
-            }
-            return json.dumps(plan)
-
-        # 2) Edit/repair stage: return a valid edit instruction that applies cleanly
-        if "output ONLY edit instructions" in system:
-            return (
-                "FILE: DRY_RUN_NOOP.txt\n"
-                "<<<<<<< REWRITE\n"
-                "DRY RUN: DummyEchoLLM created this file so the patch-apply step is exercised.\n"
-                ">>>>>>> REWRITE\n"
-            )
-
-        # Fallback
-        return "{}"
-==================== END FILE ====================
-
-
-==================== FILE: src/agent/prompts.py ====================
-from __future__ import annotations
-
-import json
-from typing import Any, Dict, List
-
-
-def _trim(s: str, max_chars: int) -> str:
-    if s is None:
-        return ""
-    s = str(s)
-    return s if len(s) <= max_chars else (s[: max_chars - 3] + "...")
-
-
-def context_pack_to_prompt(pack: Dict[str, Any], *, max_nodes: int = 18, max_snippet_chars: int = 2200) -> str:
-    """
-    Convert context_pack.json into a compact, LLM-friendly text block.
-    """
-    query = pack.get("query", "")
-    focus = (pack.get("focus") or {}).get("node_id") or pack.get("focus_node") or ""
-    seed_nodes = pack.get("seed_nodes", [])
-
-    nodes = pack.get("nodes", [])
-    def node_key(n):
-        role = n.get("role", "")
-        order = {"focus": 0, "seed": 1, "caller": 2, "callee": 3}.get(role, 9)
-        return (order, n.get("type",""), n.get("node_id",""))
-
-    nodes_sorted = sorted(nodes, key=node_key)[:max_nodes]
-
-    out: List[str] = []
-    out.append(f"Retrieval query: {query}")
-    out.append(f"Focus node: {focus}")
-    if seed_nodes:
-        out.append("Seed nodes (vector search):")
-        for s in seed_nodes[:8]:
-            out.append(f"  - {s.get('node_id')} (score={s.get('score')})")
-    out.append("")
-    out.append("=== Context Nodes (with code excerpts) ===")
-    for n in nodes_sorted:
-        nid = n.get("node_id")
-        typ = n.get("type")
-        fp = n.get("file_path")
-        sl = n.get("start_line")
-        el = n.get("end_line")
-        sig = _trim(n.get("signature",""), 240)
-        roles = n.get("roles", [])
-        why = n.get("why", [])
-        snippet = _trim(n.get("snippet",""), max_snippet_chars)
-        out.append(f"\n[{typ}] {nid}")
-        if fp:
-            out.append(f"Location: {fp}:{sl}-{el}")
-        if sig:
-            out.append(f"Signature: {sig}")
-        if roles:
-            out.append(f"Roles: {', '.join(map(str, roles))}")
-        if why:
-            why_short = [str(x) for x in why][:5]
-            out.append("Why selected:")
-            for w in why_short:
-                out.append(f"  - {w}")
-        if snippet:
-            out.append("Code:")
-            out.append(snippet)
-    out.append("\n=== End Context ===")
-    return "\n".join(out)
-
-
-PLAN_SYSTEM = """You are a senior software engineer designing a safe automated refactoring plan.
-You must be concise, risk-aware, and verification-driven.
-Return STRICT JSON only (no markdown, no commentary outside JSON)."""
-
-PLAN_USER_TEMPLATE = """Given the user request and the provided context pack, propose a refactoring plan.
-
-Requirements:
-- The goal is behavior-preserving refactoring.
-- Only modify files that are necessary.
-- Include a verification plan (commands) that can run in a sandbox (no shell operators like &&, |, >).
-- Include risk notes.
-- Optional: request additional information using tool_requests.
-- IMPORTANT: All paths must be repo-root-relative, like "src/main/java/...". Do NOT prefix with "data/marketing-demo/".
-
-Return JSON with this schema:
-{{
-  "objective": "...",
-  "assumptions": ["..."],
-  "steps": ["..."],
-  "files_to_change": [{{"file_path":"...", "why":"...", "risk":"low|medium|high"}}],
-  "verification": [{{"name":"...", "cmd":"..."}}],
-  "tool_requests": [{{"tool":"ripgrep", "pattern":"...", "path":"..."}}]
-}}
-
-User request:
-{request}
-
-Context pack:
-{context}
-"""
-
-
-EDIT_SYSTEM = """You are a senior software engineer.
-You MUST output ONLY edit instructions using either Search/Replace blocks (preferred) or Full Rewrite blocks.
-No markdown. No explanation. No code fences.
-
-FORMAT (Search/Replace blocks - preferred):
-FILE: <repo-relative-path>
-<<<<<<< SEARCH
-<exact text copied from the current file>
-=======
-<replacement text>
->>>>>>> REPLACE
-
-You may include multiple SEARCH/REPLACE blocks under the same FILE.
-
-FORMAT (Full Rewrite - allowed for small files):
-FILE: <repo-relative-path>
-<<<<<<< REWRITE
-<entire new file content>
->>>>>>> REWRITE
-
-RULES:
-- Do NOT use "..." anywhere. Do NOT omit code.
-- Do NOT abbreviate file paths.
-- For Search/Replace: the SEARCH text MUST match EXACTLY ONE occurrence in the current file.
-- Keep changes minimal and behavior-preserving.
-- If a file is shown as MISSING in the 'EXACT REPO FILE CONTENTS' section, you MUST create it using a Full Rewrite block.
-- You ARE allowed to create new files when required by the task; always use Full Rewrite for new files.
-"""
-
-
-EDIT_USER_TEMPLATE = """Task: {objective}
-
-Refactoring plan (JSON):
-{plan_json}
-
-Context pack with code excerpts:
-{context}
-
-IMPORTANT:
-- Use file paths relative to the repo root (e.g., "src/main/java/..."). Do NOT prefix with "data/marketing-demo/".
-- Output MUST be ONLY edit instructions (no commentary).
-- Prefer Search/Replace blocks (stable). Use Full Rewrite only when necessary.
-- If a file is marked MISSING in the prompt, you MUST create it via Full Rewrite.
-- Do NOT use "..." anywhere; do NOT shorten paths or code.
-
-If the prompt includes a section named "EXACT REPO FILE CONTENTS (authoritative)", you MUST use that as the source of truth.
-
-Return an UPDATED FULL set of edit instructions that should pass verification.
-Return ONLY the edit instructions.
-"""
-
-
-REPAIR_SYSTEM = """You are a senior software engineer.
-You MUST output ONLY edit instructions using either Search/Replace blocks (preferred) or Full Rewrite blocks.
-No markdown. No explanation. No code fences.
-
-You are given previous edit instructions and failure logs. Produce an UPDATED FULL set of instructions
-(relative to the ORIGINAL codebase) that fixes the failures while keeping changes minimal and behavior-preserving.
-
-FORMAT (Search/Replace blocks - preferred):
-FILE: <repo-relative-path>
-<<<<<<< SEARCH
-<exact text copied from the current file>
-=======
-<replacement text>
->>>>>>> REPLACE
-
-FORMAT (Full Rewrite - allowed for small files):
-FILE: <repo-relative-path>
-<<<<<<< REWRITE
-<entire new file content>
->>>>>>> REWRITE
-
-RULES:
-- Do NOT use "..." anywhere. Do NOT omit code.
-- Do NOT abbreviate file paths.
-- For Search/Replace: the SEARCH text MUST match EXACTLY ONE occurrence in the current file.
-- Keep changes minimal and behavior-preserving.
-- If a file is shown as MISSING in the 'EXACT REPO FILE CONTENTS' section, you MUST create it using a Full Rewrite block.
-- You ARE allowed to create new files when required by the task; always use Full Rewrite for new files.
-"""
-
-
-REPAIR_USER_TEMPLATE = """Task: {objective}
-
-Refactoring plan (JSON):
-{plan_json}
-
-Previous edit instructions (that failed to apply or failed verification):
-{prev_patch}
-
-Failure / verification outputs:
-{verify_logs}
-
-Context pack with code excerpts:
-{context}
-
-IMPORTANT:
-- Use file paths relative to the repo root (e.g., "src/main/java/..."). Do NOT prefix with "data/marketing-demo/".
-- Output MUST be ONLY edit instructions (no commentary).
-- Prefer Search/Replace blocks (stable). Use Full Rewrite only when necessary.
-- If a file is marked MISSING in the prompt, you MUST create it via Full Rewrite.
-- Do NOT use "..." anywhere; do NOT shorten paths or code.
-- If apply failed because SEARCH did not match, adjust the SEARCH blocks to match the exact current file text (include more surrounding context).
-
-If the prompt includes a section named "EXACT REPO FILE CONTENTS (authoritative)", you MUST use that as the source of truth.
-
-Return an UPDATED FULL set of edit instructions that should pass verification.
-Return ONLY the edit instructions.
-"""
-
-==================== END FILE ====================
-
-
-==================== FILE: src/agent/sandbox.py ====================
-from __future__ import annotations
-
-import os
-import glob
-import shlex
-import subprocess
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import List, Optional, Tuple
-
-
-@dataclass
-class CommandResult:
-    cmd: List[str]
-    returncode: int
-    stdout: str
-    stderr: str
-
-    @property
-    def ok(self) -> bool:
-        return self.returncode == 0
-
-
-@dataclass
-class SandboxConfig:
-    root_dir: Path
-    timeout_s: int = 240
-    allowed_commands: List[str] = field(default_factory=lambda: [
-        # Search / inspection
-        "rg", "grep", "find", "ls", "cat", "sed", "python", "python3",
-        # Build / test
-        "mvn", "./mvnw", "gradle", "./gradlew", "npm", "pnpm", "yarn",
-        "pytest",
-        # Format / lint (optional)
-        "black", "ruff", "prettier", "eslint", "google-java-format",
-        # git (optional)
-        "git",
-        # java tools
-        "javac", "java"
-    ])
-    use_docker: bool = False
-    docker_image: str = "python:3.10-slim"  # user should override for Java/Maven projects
-    docker_workdir: str = "/repo"
-
-
-class Sandbox:
-    """
-    Runs commands in a controlled way:
-    - shell=False (no pipes/&&)
-    - only whitelisted base commands
-    - optionally run inside a docker container with repo mounted read-write
-    """
-    def __init__(self, cfg: SandboxConfig):
-        self.cfg = cfg
-        self.cfg.root_dir = Path(self.cfg.root_dir).resolve()
-
-    def _is_allowed(self, cmd: List[str]) -> bool:
-        if not cmd:
-            return False
-        base = cmd[0]
-        return base in set(self.cfg.allowed_commands)
-
-    def _expand_globs(self, cmd: List[str], *, cwd: Path) -> List[str]:
-        """Expand shell-style globs (* ? [..]) because we run with shell=False.
-
-        This matches typical shell behavior for arguments like 'src/**/*.java'.
-        If a pattern has no matches, it is kept as-is.
-        """
-        expanded: List[str] = []
-        for arg in cmd:
-            # Skip options (e.g. '-cp') and URLs etc.; only expand likely file patterns
-            if any(ch in arg for ch in ("*", "?", "[")) and not arg.startswith("-"):
-                matches = glob.glob(str(cwd / arg), recursive=True)
-                if matches:
-                    # Make matches relative to cwd for nicer logs and compatibility
-                    for mpath in sorted(matches):
-                        expanded.append(os.path.relpath(mpath, str(cwd)))
-                    continue
-            expanded.append(arg)
-        return expanded
-
-
-    def run(self, cmd: List[str], *, cwd: Optional[Path] = None) -> CommandResult:
-        if not self._is_allowed(cmd):
-            raise PermissionError(f"Command not allowed: {cmd}. Allowed={self.cfg.allowed_commands}")
-
-        cwd = (cwd or self.cfg.root_dir).resolve()
-
-        # Expand globs like *.java because we run with shell=False
-        cmd = self._expand_globs(cmd, cwd=cwd)
-
-        # Ensure cwd stays inside root_dir
-        if not str(cwd).startswith(str(self.cfg.root_dir)):
-            raise PermissionError(f"cwd must be inside sandbox root: {cwd}")
-
-        if self.cfg.use_docker:
-            return self._run_in_docker(cmd, cwd=cwd)
-
-        # Local run
-        p = subprocess.run(
-            cmd,
-            cwd=str(cwd),
-            shell=False,
-            capture_output=True,
-            text=True,
-            timeout=self.cfg.timeout_s,
-        )
-        return CommandResult(cmd=cmd, returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
-
-    def _run_in_docker(self, cmd: List[str], *, cwd: Path) -> CommandResult:
-        # Map cwd relative to repo root into container workdir
-        rel = cwd.relative_to(self.cfg.root_dir)
-        workdir = str(Path(self.cfg.docker_workdir) / rel)
-
-        docker_cmd = [
-            "docker", "run", "--rm",
-            "-v", f"{self.cfg.root_dir}:{self.cfg.docker_workdir}",
-            "-w", workdir,
-            self.cfg.docker_image
-        ] + cmd
-
-        # NOTE: we intentionally do NOT allow arbitrary docker args from the LLM; only from config.
-        p = subprocess.run(
-            docker_cmd,
-            shell=False,
-            capture_output=True,
-            text=True,
-            timeout=self.cfg.timeout_s,
-        )
-        return CommandResult(cmd=docker_cmd, returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
-
-    @staticmethod
-    def split_cmd(cmd_str: str) -> List[str]:
-        # shlex split (still safe because we run shell=False)
-        return shlex.split(cmd_str)
-
-==================== END FILE ====================
-
-
-==================== FILE: src/agent/patcher.py ====================
-from __future__ import annotations
-
-import re
-from dataclasses import dataclass
-from pathlib import Path
-from typing import List, Optional
-
-
-@dataclass
-class HunkLine:
-    tag: str  # ' ', '+', '-'
-    text: str
-
-
-@dataclass
-class Hunk:
-    src_start: int
-    src_len: int
-    dst_start: int
-    dst_len: int
-    lines: List[HunkLine]
-
-
-@dataclass
-class FilePatch:
-    old_path: str
-    new_path: str
-    hunks: List[Hunk]
-
-
-_DIFF_GIT_RE = re.compile(r"^diff --git a/(.+?) b/(.+)$")
-_HUNK_RE = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
-_OLD_RE = re.compile(r"^---\s+(?:a/)?(.+)$")
-_NEW_RE = re.compile(r"^\+\+\+\s+(?:b/)?(.+)$")
-
-
-class PatchApplyError(Exception):
-    pass
-
-
-def parse_unified_diff(diff_text: str) -> List[FilePatch]:
-    """
-    Parses a subset of unified diff enough for LLM-generated patches.
-    Supports:
-      diff --git a/... b/...
-      --- a/...
-      +++ b/...
-      @@ -l,s +l,s @@ hunks
-    """
-    lines = diff_text.splitlines()
-    i = 0
-    patches: List[FilePatch] = []
-
-    current_old = None
-    current_new = None
-    current_hunks: List[Hunk] = []
-
-    def flush():
-        nonlocal current_old, current_new, current_hunks
-        if current_old and current_new:
-            patches.append(FilePatch(old_path=current_old, new_path=current_new, hunks=current_hunks))
-        current_old = None
-        current_new = None
-        current_hunks = []
-
-    while i < len(lines):
-        line = lines[i]
-
-        m = _DIFF_GIT_RE.match(line)
-        if m:
-            flush()
-            current_old, current_new = m.group(1), m.group(2)
-            i += 1
-            continue
-
-        m = _OLD_RE.match(line)
-        if m:
-            if current_old is None and current_new is None:
-                current_old = m.group(1)
-            i += 1
-            continue
-
-        m = _NEW_RE.match(line)
-        if m:
-            if current_new is None:
-                current_new = m.group(1)
-            i += 1
-            continue
-
-        m = _HUNK_RE.match(line)
-        if m:
-            src_start = int(m.group(1))
-            src_len = int(m.group(2) or "1")
-            dst_start = int(m.group(3))
-            dst_len = int(m.group(4) or "1")
-            i += 1
-
-            hunk_lines: List[HunkLine] = []
-            while i < len(lines):
-                hl = lines[i]
-                if hl.startswith("diff --git ") or hl.startswith("@@ "):
-                    break
-                if hl.startswith("--- ") or hl.startswith("+++ "):
-                    break
-                if hl.startswith("\\ No newline"):
-                    i += 1
-                    continue
-
-                if hl == "":
-                    # treat empty as context blank line
-                    hunk_lines.append(HunkLine(tag=" ", text=""))
-                    i += 1
-                    continue
-
-                tag = hl[0]
-                if tag not in (" ", "+", "-"):
-                    break
-
-                # normalize CRLF artifacts
-                txt = hl[1:].rstrip("\r")
-                hunk_lines.append(HunkLine(tag=tag, text=txt))
-                i += 1
-
-            current_hunks.append(Hunk(src_start, src_len, dst_start, dst_len, hunk_lines))
-            continue
-
-        i += 1
-
-    flush()
-    return patches
-
-
-def _safe_join(root: Path, rel: str) -> Path:
-    rel = rel.replace("\\", "/").lstrip("/")
-    p = (root / rel).resolve()
-    if not str(p).startswith(str(root.resolve())):
-        raise PatchApplyError(f"Unsafe path in patch: {rel}")
-    return p
-
-
-def normalize_patch_path(root_dir: Path, rel: str) -> str:
-    """
-    Normalize patch file paths to be relative to root_dir.
-
-    Handles cases like:
-      data/marketing-demo/src/main/java/...  (but root_dir is already marketing-demo)
-    """
-    root_dir = Path(root_dir).resolve()
-    rel = (rel or "").replace("\\", "/").lstrip("/")
-    if not rel:
-        return rel
-
-    # 1) As-is
-    try:
-        p = _safe_join(root_dir, rel)
-        if p.exists():
-            return rel
-    except PatchApplyError:
-        pass
-
-    parts = [x for x in rel.split("/") if x]
-    if len(parts) <= 1:
-        return rel
-
-    # 2) Try suffixes that exist as files
-    for i in range(1, len(parts)):
-        cand = "/".join(parts[i:])
-        try:
-            p2 = _safe_join(root_dir, cand)
-        except PatchApplyError:
-            continue
-        if p2.exists():
-            return cand
-
-    # 3) For new files: try suffixes whose parent exists
-    for i in range(1, len(parts)):
-        cand = "/".join(parts[i:])
-        try:
-            p2 = _safe_join(root_dir, cand)
-        except PatchApplyError:
-            continue
-        if p2.parent.exists():
-            return cand
-
-    return rel
-
-
-def _seek_line(lines: List[str], cursor: int, text: str, window: int = 60) -> Optional[int]:
-    """
-    Find `text` near `cursor` within +/- window.
-    Returns best matched index (closest), or None.
-    """
-    n = len(lines)
-    if n == 0:
-        return None
-    cursor = max(0, min(cursor, n - 1))
-
-    best = None
-    best_dist = 10**9
-
-    start = max(0, cursor - window)
-    end = min(n - 1, cursor + window)
-    for i in range(start, end + 1):
-        if lines[i] == text:
-            dist = abs(i - cursor)
-            if dist < best_dist:
-                best_dist = dist
-                best = i
-                if dist == 0:
-                    break
-    return best
-
-
-def apply_unified_diff(diff_text: str, *, root_dir: Path, dry_run: bool = False) -> List[Path]:
-    """
-    Applies unified diff to files under root_dir.
-    Returns list of modified file paths (absolute).
-    """
-    root_dir = Path(root_dir).resolve()
-    patches = parse_unified_diff(diff_text)
-    if not patches:
-        raise PatchApplyError("No file patches found in diff.")
-
-    modified: List[Path] = []
-
-    for fp in patches:
-        old_path = fp.old_path
-        new_path = fp.new_path
-
-        if old_path == "/dev/null":
-            old_path = ""
-        if new_path == "/dev/null":
-            new_path = ""
-
-        target_rel = new_path or old_path
-        if not target_rel:
-            raise PatchApplyError("Patch missing target path.")
-
-        target_rel = normalize_patch_path(root_dir, target_rel)
-        target = _safe_join(root_dir, target_rel)
-
-        if target.exists():
-            old_text = target.read_text(encoding="utf-8", errors="replace")
-            old_lines = [ln.rstrip("\r") for ln in old_text.splitlines()]
-        else:
-            old_lines = []
-
-        new_lines = old_lines[:]
-
-        line_offset = 0
-        for h in fp.hunks:
-            idx = max(0, h.src_start - 1 + line_offset)
-            cursor = min(idx, max(0, len(new_lines) - 1)) if new_lines else 0
-
-            for hl in h.lines:
-                if hl.tag == " ":
-                    if cursor >= len(new_lines) or new_lines[cursor] != hl.text:
-                        found = _seek_line(new_lines, cursor, hl.text, window=60)
-                        if found is None:
-                            raise PatchApplyError(
-                                f"Context mismatch while applying hunk to {target_rel}: "
-                                f"expected '{hl.text}' near line {cursor+1}"
-                            )
-                        cursor = found
-                    cursor += 1
-
-                elif hl.tag == "-":
-                    if cursor >= len(new_lines) or new_lines[cursor] != hl.text:
-                        found = _seek_line(new_lines, cursor, hl.text, window=30)
-                        if found is None:
-                            raise PatchApplyError(
-                                f"Removal mismatch while applying hunk to {target_rel}: "
-                                f"expected to remove '{hl.text}' near line {cursor+1}"
-                            )
-                        cursor = found
-                    del new_lines[cursor]
-                    line_offset -= 1
-
-                elif hl.tag == "+":
-                    new_lines.insert(cursor, hl.text)
-                    cursor += 1
-                    line_offset += 1
-
-        if not dry_run:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            target.write_text("\n".join(new_lines) + ("\n" if new_lines else ""), encoding="utf-8")
-        modified.append(target)
-
-    return modified
-
-
-def list_target_files(diff_text: str) -> List[str]:
-    patches = parse_unified_diff(diff_text)
-    out: List[str] = []
-    for fp in patches:
-        target_rel = fp.new_path or fp.old_path
-        if target_rel and target_rel not in out:
-            out.append(target_rel)
-    return out
-
-==================== END FILE ====================
-
-
-==================== FILE: src/agent/agent.py ====================
+==================== FILE: src/agent/agent pre.py ====================
 from __future__ import annotations
 
 import json
@@ -5261,7 +5681,7 @@ class AgentConfig:
     # - monolithic: one large patch per attempt (original behavior)
     # - stepwise: split into small steps (recommended; improves patch applicability and reduces truncation)
     execution_mode: str = "stepwise"  # "monolithic" or "stepwise"
-    step_max_files: int = 1           # when auto-splitting, max files per step
+    step_max_files: int = 10           # when auto-splitting, max files per step
     verify_each_step: bool = True     # run verification after each step
     enforce_file_whitelist: bool = True  # prevent edits outside plan files_to_change
     allow_new_files: bool = True      # allow creating new files via Full Rewrite
@@ -5645,7 +6065,7 @@ class RefactoringAgent:
                 continue
             txt = p.read_text(encoding="utf-8", errors="replace")
             if len(txt) > max_chars_per_file:
-                txt = txt[:max_chars_per_file] + "\n/* ... TRUNCATED ... */\n"
+                txt = txt[:max_chars_per_file] + "\n/* <TRUNCATED_FILE_CONTENT> */\n"
             blocks.append(f"\n--- FILE: {rel} ---\n{txt}\n--- END FILE: {rel} ---\n")
         return "\n".join(blocks)
 
@@ -5661,7 +6081,7 @@ class RefactoringAgent:
         )
         messages = [
             {"role": "system", "content": PLAN_SYSTEM},
-            {"role": "user", "content": PLAN_USER_TEMPLATE.format(request=request, context=context_txt)},
+            {"role": "user", "content": PLAN_USER_TEMPLATE.format(request=request, context=context_txt, hard_requirements=self._hard_requirements_text(context_pack))},
         ]
         out = self.llm.chat(messages, temperature=0.1, max_tokens=1400)
         plan = self._extract_json(out)
@@ -5707,7 +6127,7 @@ class RefactoringAgent:
         plan_json = json.dumps(plan, ensure_ascii=False, indent=2)
         messages = [
             {"role": "system", "content": EDIT_SYSTEM},
-            {"role": "user", "content": EDIT_USER_TEMPLATE.format(objective=objective, plan_json=plan_json, context=context_txt)},
+            {"role": "user", "content": EDIT_USER_TEMPLATE.format(objective=objective, plan_json=plan_json, context=context_txt, hard_requirements=self._hard_requirements_text(context_pack))},
         ]
         patch = self.llm.chat(messages, temperature=0.2, max_tokens=self.cfg.edit_max_tokens)
         return (patch or "").strip()
@@ -5732,7 +6152,8 @@ class RefactoringAgent:
                 plan_json=plan_json,
                 prev_patch=prev_patch,
                 verify_logs=verify_logs,
-                context=context_txt
+                context=context_txt,
+                hard_requirements=self._hard_requirements_text(context_pack)
             )},
         ]
         patch = self.llm.chat(messages, temperature=0.2, max_tokens=self.cfg.repair_max_tokens)
@@ -5800,6 +6221,16 @@ class RefactoringAgent:
         rel_files = [x for x in rel_files if not (x in seen or seen.add(x))]
         return rel_files
 
+    def _compute_allowed_files(self, plan: Dict[str, Any], context_pack: Dict[str, Any]) -> List[str]:
+        allowed = self._allowed_files_from_plan(plan)
+        for ef in (context_pack.get("expected_files") or []):
+            if isinstance(ef, str) and ef.strip():
+                allowed.append(ef.strip())
+        # de-dup keep order
+        seen: set[str] = set()
+        return [x for x in allowed if not (x in seen or seen.add(x))]
+
+
     def _enforce_changed_files_whitelist(self, allowed: List[str]) -> Tuple[bool, str]:
         if not self.cfg.enforce_file_whitelist:
             return True, ""
@@ -5839,7 +6270,58 @@ class RefactoringAgent:
         return f"\n[FILE EXCERPT] {resolved} around line {line_no}\n{excerpt}\n"
 
 
-    # ---------------------------
+    
+    def _hard_requirements_text(self, context_pack: Dict[str, Any]) -> str:
+        """Build strict, machine-checkable constraints to reduce 'guess-the-naming' failure modes."""
+        lines: List[str] = []
+        expected = context_pack.get("expected_files") or []
+        expected = [str(x).strip() for x in expected if str(x).strip()]
+        if expected:
+            lines.append(f"- These files MUST exist at EXACT repo-relative paths after the refactor (do not rename/move):")
+            for p in expected:
+                lines.append(f"  - {p}")
+            lines.append("- Do NOT satisfy expected files by using inner/nested classes; create top-level files at the exact paths.")
+        focus_after = str(context_pack.get("focus_node_after") or "").strip()
+        if focus_after:
+            lines.append(f"- The post-refactor code MUST contain this method id exactly: {focus_after}")
+            lines.append("  - Do not rename the class or method in that id. If you move code, keep this API as an adapter/wrapper.")
+        if not lines:
+            return "- (none)"
+        return "\n".join(lines)
+
+    def _extract_compiler_error_files(self, logs: str) -> List[str]:
+        """Heuristically extract repo-relative file paths from compiler/test logs (javac/maven/gradle)."""
+        if not logs:
+            return []
+        out: List[str] = []
+        # Common patterns:
+        # 1) javac: /abs/path/Foo.java:123: error:
+        # 2) javac: src/main/java/.../Foo.java:123: error:
+        # 3) maven: [ERROR] /abs/path/Foo.java:[123,45] cannot find symbol
+        patterns = [
+            r"(?P<path>(?:[A-Za-z]:)?[^\s:]+?\.java):(?P<line>\d+):\s*error",
+            r"\[ERROR\]\s+(?P<path>(?:[A-Za-z]:)?[^\s:]+?\.java):\[(?P<line>\d+),\d+\]",
+        ]
+        for pat in patterns:
+            for m in re.finditer(pat, logs):
+                p = (m.group("path") or "").strip()
+                if not p:
+                    continue
+                # Normalize to repo-relative if possible
+                p_norm = p.replace("\\", "/")
+                wd = str(self.work_dir).replace("\\", "/").rstrip("/")
+                if p_norm.startswith(wd + "/"):
+                    p_norm = p_norm[len(wd) + 1 :]
+                # Filter build outputs (target/, build/) unless it's in source tree
+                if "/target/" in p_norm or p_norm.startswith("target/") or "/build/" in p_norm or p_norm.startswith("build/"):
+                    # ignore compiled artifacts
+                    continue
+                if p_norm not in out:
+                    out.append(p_norm)
+        return out
+
+
+# ---------------------------
     # Apply LLM edits (Search/Replace Blocks or Full Rewrite)
     # ---------------------------
 
@@ -6186,13 +6668,7 @@ class RefactoringAgent:
         baseline_rev = self._git_head_hash()
 
         # Planned/allowed files (also include expected_files from context_pack if present)
-        allowed_files = self._allowed_files_from_plan(plan)
-        for ef in (context_pack.get("expected_files") or []):
-            if isinstance(ef, str) and ef.strip():
-                allowed_files.append(ef.strip())
-        # de-dup
-        seen = set()
-        allowed_files = [x for x in allowed_files if not (x in seen or seen.add(x))]
+        allowed_files = self._compute_allowed_files(plan, context_pack)
 
         modified_files: List[str] = []
 
@@ -6235,12 +6711,52 @@ class RefactoringAgent:
                     prev_patch = patch
                     continue
 
-                ok_scope, scope_logs = self._enforce_changed_files_whitelist(allowed_files)
+                ok_scope, scope_logs = self._enforce_changed_files_whitelist(
+    self._compute_allowed_files(plan, context_pack)
+)
+
                 if not ok_scope:
-                    (artifacts / f"scope_attempt_{it}.txt").write_text(scope_logs, encoding="utf-8")
-                    last_logs = scope_logs
-                    prev_patch = patch
-                    continue
+                    (artifacts / f"scope_step{si}_attempt{it}.txt").write_text(scope_logs, encoding="utf-8")
+
+                    # 解析 out-of-scope
+                    m = re.search(r"Out-of-scope:\s*\[(.*?)\]", scope_logs, flags=re.DOTALL)
+                    oos_paths = re.findall(r"'([^']+)'", m.group(0)) if m else []
+
+                    found_set = set((context_pack or {}).get("found_files") or [])
+                    candidates = []
+                    for p in oos_paths:
+                        p = (p or "").strip()
+                        if not p:
+                            continue
+                        # ✅ 建议用 work_dir 判断是否存在（而不是 project_dir）
+                        if (p in found_set) or (self.work_dir / p).exists():
+                            candidates.append(p)
+
+                    candidates = list(dict.fromkeys(candidates))
+                    if candidates:
+                        scope_expanded_files = list(dict.fromkeys(scope_expanded_files + candidates))
+                        allowed_union = list(dict.fromkeys(global_plan_files + (files_in_step or []) + scope_expanded_files))
+                        step_plan["files_to_change"] = [{"file_path": p} for p in allowed_union]
+
+                        # ✅ 关键：扩容后立刻复查 scope（不要直接 continue）
+                        ok2, scope_logs2 = self._enforce_changed_files_whitelist(
+                            self._compute_allowed_files(step_plan, context_pack)
+                        )
+                        if ok2:
+                            (artifacts / f"scope_step{si}_attempt{it}_expanded.txt").write_text(
+                                scope_logs + "\n\n[ALLOWLIST EXPANDED]\n" + scope_logs2,
+                                encoding="utf-8",
+                            )
+                            # ✅ 继续往下走 verify/commit
+                        else:
+                            step_last_logs = scope_logs2
+                            step_prev_patch = patch
+                            continue
+                    else:
+                        step_last_logs = scope_logs
+                        step_prev_patch = patch
+                        continue
+
 
                 verify_ok, verify_logs = self._verify(plan)
                 (artifacts / f"verify_attempt_{it}.txt").write_text(verify_logs, encoding="utf-8")
@@ -6286,6 +6802,10 @@ class RefactoringAgent:
             if focus_fp:
                 step_files.append(focus_fp)
 
+        # Keep a stable "global" allowlist from the original plan (avoid chunking-induced scope errors)
+        global_plan_files = list(dict.fromkeys(step_files))
+
+
         # chunk by step_max_files
         chunk = max(1, int(self.cfg.step_max_files or 1))
         steps: List[List[str]] = [step_files[i:i+chunk] for i in range(0, len(step_files), chunk)]
@@ -6296,16 +6816,21 @@ class RefactoringAgent:
             step_start_rev = self._git_head_hash()
             step_prev_patch = ""
             step_last_logs = ""
+            scope_expanded_files: List[str] = []
 
             step_objective = objective
             if files_in_step:
-                step_objective += f"\n\n[STEP {si}/{len(steps)}] Only edit these files: {', '.join(files_in_step)}"
+                step_objective += f"\n\n[STEP {si}/{len(steps)}] Primary edit targets: {', '.join(files_in_step)}"
             else:
                 step_objective += f"\n\n[STEP {si}/{len(steps)}]"
 
             step_plan = dict(plan)
-            if files_in_step:
-                step_plan["files_to_change"] = [{"file_path": p} for p in files_in_step]
+
+            # Allow edits to: global plan files ∪ current step primary targets ∪ (scope-expanded files)
+            allowed_union = list(dict.fromkeys(global_plan_files + (files_in_step or []) + scope_expanded_files))
+            if allowed_union:
+                step_plan["files_to_change"] = [{"file_path": p} for p in allowed_union]
+
 
             for it in range(1, self.cfg.max_iters + 1):
                 # Reset to start of this step (NOT to baseline) so we can accumulate progress.
@@ -6339,17 +6864,66 @@ class RefactoringAgent:
                     step_prev_patch = patch
                     continue
 
-                ok_scope, scope_logs = self._enforce_changed_files_whitelist(allowed_files)
+                ok_scope, scope_logs = self._enforce_changed_files_whitelist(
+    self._compute_allowed_files(step_plan, context_pack)
+)
+
                 if not ok_scope:
                     (artifacts / f"scope_step{si}_attempt{it}.txt").write_text(scope_logs, encoding="utf-8")
-                    step_last_logs = scope_logs
-                    step_prev_patch = patch
-                    continue
+
+                    # 解析 out-of-scope
+                    m = re.search(r"Out-of-scope:\s*\[(.*?)\]", scope_logs, flags=re.DOTALL)
+                    oos_paths = re.findall(r"'([^']+)'", m.group(0)) if m else []
+
+                    found_set = set((context_pack or {}).get("found_files") or [])
+                    candidates = []
+                    for p in oos_paths:
+                        p = (p or "").strip()
+                        if not p:
+                            continue
+                        # ✅ 建议用 work_dir 判断是否存在（而不是 project_dir）
+                        if (p in found_set) or (self.work_dir / p).exists():
+                            candidates.append(p)
+
+                    candidates = list(dict.fromkeys(candidates))
+                    if candidates:
+                        scope_expanded_files = list(dict.fromkeys(scope_expanded_files + candidates))
+                        allowed_union = list(dict.fromkeys(global_plan_files + (files_in_step or []) + scope_expanded_files))
+                        step_plan["files_to_change"] = [{"file_path": p} for p in allowed_union]
+
+                        # ✅ 关键：扩容后立刻复查 scope（不要直接 continue）
+                        ok2, scope_logs2 = self._enforce_changed_files_whitelist(
+                            self._compute_allowed_files(step_plan, context_pack)
+                        )
+                        if ok2:
+                            (artifacts / f"scope_step{si}_attempt{it}_expanded.txt").write_text(
+                                scope_logs + "\n\n[ALLOWLIST EXPANDED]\n" + scope_logs2,
+                                encoding="utf-8",
+                            )
+                            # ✅ 继续往下走 verify/commit
+                        else:
+                            step_last_logs = scope_logs2
+                            step_prev_patch = patch
+                            continue
+                    else:
+                        step_last_logs = scope_logs
+                        step_prev_patch = patch
+                        continue
+
 
                 if self.cfg.verify_each_step:
                     verify_ok, verify_logs = self._verify(step_plan)
                     (artifacts / f"verify_step{si}_attempt{it}.txt").write_text(verify_logs, encoding="utf-8")
                     if not verify_ok:
+                        # Error-driven scope expansion: when compilation/test fails due to missing symbols,
+                        # automatically include the referenced files in the next iteration's edit scope and
+                        # dump their full contents to the model (to avoid API skew across files).
+                        extra_files = self._extract_compiler_error_files(verify_logs)
+                        if extra_files:
+                            cur_files = [str(x.get("file_path") or "").strip() for x in (step_plan.get("files_to_change") or []) if str(x.get("file_path") or "").strip()]
+                            merged = cur_files + [p for p in extra_files if p not in cur_files]
+                            step_plan["files_to_change"] = [{"file_path": p} for p in merged]
+                            step_objective += "\n\n[ERROR-DRIVEN SCOPE EXPANSION] Verification failed. You may (and likely must) also edit: " + ", ".join(extra_files)
                         step_last_logs = verify_logs
                         step_prev_patch = patch
                         continue
@@ -6412,6 +6986,7 @@ def _format_cmd_result(res: CommandResult) -> str:
         f"[STDOUT]\n{res.stdout}\n"
         f"[STDERR]\n{res.stderr}\n"
     )
+
 
 ==================== END FILE ====================
 
@@ -6783,6 +7358,7 @@ def context_pack_file_coverage(
         "coverage": coverage,
     }
 
+
 ==================== END FILE ====================
 
 
@@ -6855,7 +7431,7 @@ def _build_graph_and_index(project_root: str, *, prefer_tree_sitter: bool = True
     builder.build_from_parsed_data(data)
     graph = builder.get_graph()
 
-    vindex = NodeVectorIndex()
+    vindex = NodeVectorIndex(project_root=project_root)
     vindex.build_from_graph(graph)
     return graph, vindex
 
@@ -7037,6 +7613,7 @@ def run_benchmark(
     (out_dir / "benchmark_results.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     return results
 
+
 ==================== END FILE ====================
 
 
@@ -7045,6 +7622,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -7110,7 +7688,7 @@ def _build_graph_and_index(project_root: str, *, prefer_tree_sitter: bool = True
     builder.build_from_parsed_data(data)
     graph = builder.get_graph()
 
-    vindex = NodeVectorIndex()
+    vindex = NodeVectorIndex(project_root=project_root)
     vindex.build_from_graph(graph)
     return graph, vindex
 
@@ -7135,14 +7713,16 @@ def build_context_pack(
     engine = GraphRAGContextEngine(graph, vindex)
 
     if mode == "vector_only":
+        # Vector-only ablation: no graph-hop expansion, but we still allow limited same-file context
+        # so the model can see nearby helpers/imports and avoid trivial "missing symbol" failures.
         return engine.query(
             query,
             seed_top_k=seed_top_k,
             hops=0,
             max_nodes=max_nodes,
-            same_class_limit=0,
-            same_file_limit=0,
-            shared_field_limit=0,
+            same_class_limit=2,
+            same_file_limit=5,
+            shared_field_limit=1,
         )
 
     if mode != "graph_rag":
@@ -7184,6 +7764,7 @@ def run_benchmark(
     allow_cmds: Optional[List[str]] = None,
     restrict_vector_only_tools: bool = False,
     dry_llm: bool = False,
+    accept_mode: str = "strict",  # strict|semantic
 ) -> Dict[str, Any]:
     """Run tasks under different retrieval modes and compute before/after metrics.
 
@@ -7223,6 +7804,13 @@ def run_benchmark(
                 max_nodes=max_nodes,
                 prefer_tree_sitter=prefer_tree_sitter,
             )
+            # Inject benchmark hard requirements into the context pack so the agent can enforce them.
+            pack["expected_files"] = list(task.expected_files or [])
+            if task.focus_node_after:
+                pack["focus_node_after"] = task.focus_node_after
+            if task.focus_node:
+                pack["focus_node"] = task.focus_node
+
             (task_dir / "context_pack.json").write_text(json.dumps(pack, ensure_ascii=False, indent=2), encoding="utf-8")
 
             # 2) Coverage metric (benchmark style)
@@ -7295,9 +7883,15 @@ def run_benchmark(
                 "post_impacted_files": _rel_files(post_risk.impacted_files, work_dir),
             }
 
-            # 7) Lightweight acceptance checks (more "honest" benchmark)
-            accept_ok = True
-            accept_reasons: List[str] = []
+            # 7) Lightweight acceptance checks
+            # We compute BOTH:
+            # - strict: requires exact expected file paths + exact focus_node_after method id (if provided)
+            # - semantic: allows reasonable variations (e.g., file path differs but class exists; method moved but name preserved)
+            # The final accept_ok is controlled by accept_mode.
+            accept_strict_ok = True
+            accept_strict_reasons: List[str] = []
+            accept_semantic_ok = True
+            accept_semantic_reasons: List[str] = []
 
             def _looks_like_method_id(s: Optional[str]) -> bool:
                 if not s:
@@ -7313,11 +7907,24 @@ def run_benchmark(
                 left, right = s.split(".", 1)
                 return bool(left) and bool(right)
 
+            # ---- Focus method acceptance ----
             if _looks_like_method_id(task.focus_node_after):
                 if post_focus_method is None:
-                    accept_ok = False
-                    accept_reasons.append("post_focus_method_missing")
+                    accept_strict_ok = False
+                    accept_strict_reasons.append("post_focus_method_missing")
 
+                    # Semantic fallback: allow the method to have moved to a different class
+                    method_name = str(task.focus_node_after).split(".", 1)[1]
+                    candidates = [mid for mid in post_method_mm.keys() if mid.endswith("." + method_name)]
+                    if candidates:
+                        accept_semantic_reasons.append(
+                            "post_focus_method_missing_but_found_similar_method: " + ", ".join(candidates[:3])
+                        )
+                    else:
+                        accept_semantic_ok = False
+                        accept_semantic_reasons.append("post_focus_method_missing")
+
+            # ---- Expected files acceptance ----
             missing_expected: List[str] = []
             for f in task.expected_files:
                 f = str(f or "").strip()
@@ -7327,19 +7934,66 @@ def run_benchmark(
                     missing_expected.append(f)
 
             if missing_expected:
-                accept_ok = False
-                accept_reasons.append("missing_expected_files: " + ", ".join(missing_expected))
+                accept_strict_ok = False
+                accept_strict_reasons.append("missing_expected_files: " + ", ".join(missing_expected))
 
+                # Semantic fallback: if the expected file is missing, but the class exists somewhere else, allow it.
+                # (This avoids punishing reasonable file/package layout differences while still checking intent.)
+                class_index: Dict[str, str] = {}
+                try:
+                    for dirpath, _, filenames in os.walk(work_dir):
+                        for fn in filenames:
+                            if not fn.endswith(".java"):
+                                continue
+                            abs_fp = Path(dirpath) / fn
+                            rel_fp = abs_fp.relative_to(work_dir).as_posix()
+                            try:
+                                txt = abs_fp.read_text(encoding="utf-8", errors="ignore")
+                            except Exception:
+                                continue
+                            for m in re.finditer(r"\b(class|interface|enum)\s+([A-Za-z_][A-Za-z0-9_]*)\b", txt):
+                                cname = m.group(2)
+                                if cname and cname not in class_index:
+                                    class_index[cname] = rel_fp
+                except Exception:
+                    class_index = {}
+
+                still_missing: List[str] = []
+                for f in missing_expected:
+                    base = Path(f).name
+                    cname = base[:-5] if base.endswith(".java") else base
+                    if cname and cname in class_index:
+                        accept_semantic_reasons.append(f"expected_file_missing_but_class_found:{cname}@{class_index[cname]}")
+                    else:
+                        still_missing.append(f)
+
+                if still_missing:
+                    accept_semantic_ok = False
+                    accept_semantic_reasons.append("missing_expected_files: " + ", ".join(still_missing))
+
+            # Select final acceptance
+            mode_sel = (accept_mode or "strict").strip().lower()
+            if mode_sel not in {"strict", "semantic"}:
+                mode_sel = "strict"
+            accept_ok = accept_semantic_ok if mode_sel == "semantic" else accept_strict_ok
+            accept_reasons = accept_semantic_reasons if mode_sel == "semantic" else accept_strict_reasons
+
+            run_record["accept_mode"] = mode_sel
             run_record["accept_ok"] = accept_ok
             run_record["accept_reasons"] = accept_reasons
+            run_record["accept_strict_ok"] = accept_strict_ok
+            run_record["accept_strict_reasons"] = accept_strict_reasons
+            run_record["accept_semantic_ok"] = accept_semantic_ok
+            run_record["accept_semantic_reasons"] = accept_semantic_reasons
+
             if run_record.get("status") == "success" and not accept_ok:
                 run_record["status"] = "failed_acceptance"
-
             (task_dir / "run_record.json").write_text(json.dumps(run_record, ensure_ascii=False, indent=2), encoding="utf-8")
             results["runs"][mode][task.name] = run_record
 
     (out_dir / "benchmark_results.json").write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     return results
+
 
 ==================== END FILE ====================
 
@@ -7350,6 +8004,7 @@ def run_benchmark(
 This package is intentionally dependency-light so you can ship a reproducible
 benchmark/evaluation story alongside the refactoring demo.
 """
+
 
 ==================== END FILE ====================
 
@@ -7540,6 +8195,7 @@ def write_benchmark_report(results_path: Path, *, out_html: Path) -> Path:
     html_text = render_benchmark_report(results)
     out_html.write_text(html_text, encoding='utf-8')
     return out_html
+
 
 ==================== END FILE ====================
 

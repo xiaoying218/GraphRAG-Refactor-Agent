@@ -183,3 +183,4 @@ def write_benchmark_report(results_path: Path, *, out_html: Path) -> Path:
     html_text = render_benchmark_report(results)
     out_html.write_text(html_text, encoding='utf-8')
     return out_html
+

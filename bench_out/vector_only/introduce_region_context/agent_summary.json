@@ -1,13 +1,14 @@
 {
   "status": "success",
   "attempts": 1,
-  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_155655",
-  "artifacts_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260101_155655/.agent_artifacts",
+  "work_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_072200",
+  "artifacts_dir": "/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/.refactor_agent_runs/20260104_072200/.agent_artifacts",
   "modified_files": [
     "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "src/main/java/com/icbc/marketing/core/ScoringService.java",
     "target/classes/com/icbc/marketing/DemoRunner.class",
-    "target/classes/com/icbc/marketing/core/LegacyScoringUtil$Region.class",
     "target/classes/com/icbc/marketing/core/LegacyScoringUtil.class",
+    "target/classes/com/icbc/marketing/core/ScoringService.class",
     "target/classes/com/icbc/marketing/service/CampaignDecisionEngine.class",
     "target/classes/com/icbc/marketing/strategy/AbstractBaseStrategy.class",
     "target/classes/com/icbc/marketing/strategy/IPromotionStrategy.class",

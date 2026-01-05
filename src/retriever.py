@@ -57,3 +57,4 @@ class GraphRetriever:
                 raise RuntimeError("Vector index not provided. Build NodeVectorIndex and pass it into GraphRetriever.")
             self._engine = GraphRAGContextEngine(self.graph, self.vector_index)
         return self._engine.query(query, **kwargs)
+

@@ -30,7 +30,7 @@
         "end_line": 19
       },
       "why": [
-        "focus node",
+        "focus node (exact match or top seed)",
         "seed via vector search (score=1.000)",
         "same class member of LegacyScoringUtil",
         "same file helper (/Users/lixiaoying/lxy/code/Code Refactoring/graph_rag_context_engine/data/marketing-demo/src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java)"
@@ -329,5 +329,9 @@
     "hops": 2,
     "selected_nodes": 9,
     "selected_edges": 9
-  }
+  },
+  "expected_files": [
+    "src/main/java/com/icbc/marketing/core/ScoringService.java"
+  ],
+  "focus_node_after": "ScoringService.calculateBaseScoreWithRegion"
 }

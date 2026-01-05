@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 import os
@@ -74,3 +73,4 @@ def auto_load_dotenv(explicit_path: Optional[str] = None) -> Optional[str]:
             # Never hard-fail on dotenv parsing
             continue
     return None
+

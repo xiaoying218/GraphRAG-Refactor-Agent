@@ -1,0 +1,30 @@
+# Python 编译文件
+__pycache__/
+*.py[cod]
+
+# 虚拟环境 (截图里有 .venv)
+.venv/
+venv/
+env/
+
+# 环境变量/敏感信息 (截图里有 .env，绝对不能上传！)
+.env
+
+# IDE 配置
+.vscode/
+.idea/
+
+# 运行产生的输出数据和日志 (根据截图判断)
+bench_out/
+bench_out_case_*/
+output/
+logs/
+*.log
+data/
+
+# 具体的大型输出文件
+final_code_*.txt
+merged_refactor_debug_log.txt
+
+# Mac 系统文件
+.DS_Store
