@@ -132,6 +132,8 @@ python demo_benchmark.py \
 Outputs:
 - `bench_out/benchmark_results.json`
 - `bench_out/benchmark_report.html`
+- `docs/README_REPORT.md`
+- `docs/benchmark_dashboard.html`
 
 ---
 

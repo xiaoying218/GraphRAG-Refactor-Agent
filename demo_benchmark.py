@@ -12,12 +12,6 @@ Usage (example):
     --tasks data/bench_tasks.json \
     --out bench_out \
     --modes graph_rag,vector_only
-
-Notes:
-  - By default, the agent uses an OpenAI-compatible endpoint.
-    Set OPENAI_API_KEY (and optionally OPENAI_MODEL, OPENAI_BASE_URL).
-  - If you pass --dry-llm, the benchmark will still run but refactoring will
-    likely fail verification (useful to validate the plumbing).
 """
 
 from __future__ import annotations

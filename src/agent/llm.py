@@ -38,7 +38,6 @@ class OpenAICompatibleChatClient:
     def __init__(self, cfg: OpenAICompatibleConfig):
         self.cfg = cfg
         if not self.cfg.api_key:
-            # Try loading from a local .env file (common in research demos).
             auto_load_dotenv(os.environ.get("REFAC_DOTENV") or os.environ.get("DOTENV_PATH"))
             self.cfg.api_key = os.environ.get("OPENAI_API_KEY") or os.environ.get("OPENAI_APIKEY")
 

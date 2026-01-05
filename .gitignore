@@ -21,6 +21,8 @@ output/
 logs/
 *.log
 data/
+success/
+docs/
 
 # 具体的大型输出文件
 final_code_*.txt
@@ -28,3 +30,10 @@ merged_refactor_debug_log.txt
 
 # Mac 系统文件
 .DS_Store
+
+# 忽略本地的数据合并脚本
+merge*.py
+context_pack.json
+
+# 忽略结果文件ß
+final_code.txt
