@@ -73,7 +73,5 @@ While this demo establishes the feasibility of the pipeline, my goal for the PhD
 
 ### Installation
 ```bash
-git clone [https://github.com/Your-New-Username/RefactorGraph-Agent.git](https://github.com/Your-New-Username/RefactorGraph-Agent.git)
-cd RefactorGraph-Agent
 pip install -r requirements.txt
 
