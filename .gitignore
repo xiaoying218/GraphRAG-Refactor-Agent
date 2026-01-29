@@ -37,3 +37,6 @@ context_pack.json
 
 # 忽略结果文件ß
 final_code.txt
+
+sft/repos/jpetstore-6/
+sft/repos/spring-petclinic/

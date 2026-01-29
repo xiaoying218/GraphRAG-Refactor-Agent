@@ -1,0 +1,63 @@
+diff --git a/src/main/java/org/mybatis/jpetstore/domain/Cart.java b/src/main/java/org/mybatis/jpetstore/domain/Cart.java
+index d7ffa2f..03a8f3d 100644
+--- a/src/main/java/org/mybatis/jpetstore/domain/Cart.java
++++ b/src/main/java/org/mybatis/jpetstore/domain/Cart.java
+@@ -118,7 +118,7 @@ public class Cart implements Serializable {
+    */
+   public BigDecimal getSubTotal() {
+     return itemList.stream()
+-        .map(cartItem -> cartItem.getItem().getListPrice().multiply(new BigDecimal(cartItem.getQuantity())))
++        .map(cartItem -> cartItem.getItem().getListPrice().multiply(BigDecimal.valueOf(cartItem.getQuantity())))
+         .reduce(BigDecimal.ZERO, BigDecimal::add);
+   }
+ 
+diff --git a/src/main/java/org/mybatis/jpetstore/domain/CartItem.java b/src/main/java/org/mybatis/jpetstore/domain/CartItem.java
+index 4355de9..3dc687e 100644
+--- a/src/main/java/org/mybatis/jpetstore/domain/CartItem.java
++++ b/src/main/java/org/mybatis/jpetstore/domain/CartItem.java
+@@ -69,7 +69,7 @@ public class CartItem implements Serializable {
+   }
+ 
+   private void calculateTotal() {
+-    total = Optional.ofNullable(item).map(Item::getListPrice).map(v -> v.multiply(new BigDecimal(quantity)))
++    total = Optional.ofNullable(item).map(Item::getListPrice).map(v -> v.multiply(BigDecimal.valueOf(quantity)))
+         .orElse(null);
+   }
+ 
+diff --git a/src/main/java/org/mybatis/jpetstore/domain/LineItem.java b/src/main/java/org/mybatis/jpetstore/domain/LineItem.java
+index ae1180f..bcf2b52 100644
+--- a/src/main/java/org/mybatis/jpetstore/domain/LineItem.java
++++ b/src/main/java/org/mybatis/jpetstore/domain/LineItem.java
+@@ -111,7 +111,7 @@ public class LineItem implements Serializable {
+   }
+ 
+   private void calculateTotal() {
+-    total = Optional.ofNullable(item).map(Item::getListPrice).map(v -> v.multiply(new BigDecimal(quantity)))
++    total = Optional.ofNullable(item).map(Item::getListPrice).map(v -> v.multiply(BigDecimal.valueOf(quantity)))
+         .orElse(null);
+   }
+ 
+diff --git a/src/test/java/org/mybatis/jpetstore/service/OrderServiceTest.java b/src/test/java/org/mybatis/jpetstore/service/OrderServiceTest.java
+index 638cf39..ce91e7c 100644
+--- a/src/test/java/org/mybatis/jpetstore/service/OrderServiceTest.java
++++ b/src/test/java/org/mybatis/jpetstore/service/OrderServiceTest.java
+@@ -126,8 +126,8 @@ class OrderServiceTest {
+ 
+     // then
+     assertThat(nextId).isEqualTo(100);
+-    verify(sequenceMapper).getSequence(argThat(v -> v.getName().equals("order") && v.getNextId() == -1));
+-    verify(sequenceMapper).updateSequence(argThat(v -> v.getName().equals("order") && v.getNextId() == 101));
++    verify(sequenceMapper).getSequence(argThat(v -> "order".equals(v.getName()) && v.getNextId() == -1));
++    verify(sequenceMapper).updateSequence(argThat(v -> "order".equals(v.getName()) && v.getNextId() == 101));
+ 
+   }
+ 
+@@ -145,7 +145,7 @@ class OrderServiceTest {
+       // then
+       assertThat(e.getMessage())
+           .isEqualTo("Error: A null sequence was returned from the database (could not get next order sequence).");
+-      verify(sequenceMapper).getSequence(argThat(v -> v.getName().equals("order") && v.getNextId() == -1));
++      verify(sequenceMapper).getSequence(argThat(v -> "order".equals(v.getName()) && v.getNextId() == -1));
+     }
+ 
+   }

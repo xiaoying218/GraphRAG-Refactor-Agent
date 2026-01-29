@@ -1,0 +1,18 @@
+{
+  "expected_files": [
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "src/main/java/com/icbc/marketing/core/ScoringService.java"
+  ],
+  "found_files": [
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java",
+    "src/main/java/com/icbc/marketing/service/CampaignDecisionEngine.java",
+    "src/main/java/com/icbc/marketing/strategy/AbstractBaseStrategy.java"
+  ],
+  "hit_files": [
+    "src/main/java/com/icbc/marketing/core/LegacyScoringUtil.java"
+  ],
+  "missing_files": [
+    "src/main/java/com/icbc/marketing/core/ScoringService.java"
+  ],
+  "coverage": 0.5
+}

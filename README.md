@@ -27,14 +27,14 @@ A research-oriented demo system for **safe, verifiable Java refactoring** using 
 
 ---
 
-<!-- ## Why This Matters (Motivation)
+## Why This Matters (Motivation)
 
 LLM-based refactoring commonly fails in industrial codebases due to:
 
 1. **Hallucinated references**: inventing methods/classes or misreading inheritance/call relations under limited context.
 2. **Weak verification**: “looks correct” does not mean “compiles and preserves behavior”.
 
-This project addresses both with **graph-grounded retrieval** (GraphRAG) and a **verification-driven agentic loop**. -->
+This project addresses both with **graph-grounded retrieval** (GraphRAG) and a **verification-driven agentic loop**.
 
 
 
@@ -70,7 +70,9 @@ graph LR
 
 ### Install
 ```bash
-pip install -r requirements.txt
+uv venv --python 3.10
+source .venv/bin/activate
+uv pip install -r requirements.txt
 ```
 
 ### 1) Build a GraphRAG context pack
